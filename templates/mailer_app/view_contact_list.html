@@ -1,0 +1,66 @@
+{% extends "mailer_app/base.html" %}
+
+{% block title %}View List: {{ contact_list.name }} - Bulk Emailer{% endblock %}
+
+{% block page_title %}Contacts in: {{ contact_list.name }}{% endblock %}
+
+{% block content %}
+<div class="card mb-6"> <div class="flex justify-between items-center">
+        <h2 class="text-xl font-semibold text-indigo-700">List Details</h2>
+        <a href="{% url 'mailer_app:manage_contact_lists' %}" class="btn-secondary text-sm">Back to Lists</a>
+    </div>
+    <p class="text-sm text-gray-600 mt-1">Created: {{ contact_list.created_at|date:"Y-m-d H:i" }}</p>
+    <p class="text-sm text-gray-600 mt-1">Total Contacts: {{ contacts.count }}</p>
+</div>
+
+<div class="card"> <h3 class="text-lg font-medium text-gray-800 mb-4">Contacts ({{ contacts.count }})</h3>
+    {% if contacts %}
+    <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">First Name</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Name</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Company</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Job Title</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Custom Fields</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subscribed</th>
+                </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+                {% for contact in contacts %}
+                <tr>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ contact.email|default:"N/A" }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ contact.first_name|default:"N/A" }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ contact.last_name|default:"N/A" }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ contact.company|default:"N/A" }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ contact.job_title|default:"N/A" }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {% if contact.custom_fields %}
+                            <ul class="list-disc list-inside text-xs">
+                            {% for key, value in contact.custom_fields.items %}
+                                <li><strong>{{ key }}</strong>: {{ value|truncatechars:30 }}</li>
+                            {% endfor %}
+                            </ul>
+                        {% else %}
+                            N/A
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {% if contact.subscribed %}
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Yes</span>
+                        {% else %}
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">No</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="text-gray-600">No contacts found in this list.</p>
+    {% endif %}
+</div>
+{% endblock %}

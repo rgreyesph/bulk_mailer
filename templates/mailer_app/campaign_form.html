@@ -1,0 +1,132 @@
+{% extends "mailer_app/base.html" %} {% load static %}
+
+{% block title %}{{ form_title|default:"Create Campaign" }} - Bulk Emailer{% endblock %}
+
+{% block page_title %}{{ form_title|default:"Create New Campaign" }}{% endblock %}
+
+{% block content %}
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+    <div class="md:col-span-1 card"> <h2 class="text-xl font-semibold mb-4 text-indigo-700">
+            {% if form.instance.pk %}Edit: {{ form.instance.name }}{% else %}Create New Campaign{% endif %}
+        </h2>
+        <form method="post" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+                <div class="alert alert-danger mb-4" role="alert"> {% for error in form.non_field_errors %}
+                        <p class="mb-0">{{ error }}</p>
+                    {% endfor %}
+                </div>
+            {% endif %}
+
+            <div class="space-y-4">
+                <div>
+                    <label for="{{ form.name.id_for_label }}" class="label-text">{{ form.name.label }}</label>
+                    {{ form.name }} {% if form.name.help_text %}<p class="mt-1 text-xs text-gray-500">{{ form.name.help_text }}</p>{% endif %}
+                    {% for error in form.name.errors %}<p class="text-red-500 text-xs mt-1">{{ error }}</p>{% endfor %}
+                </div>
+
+                <div>
+                    <label for="{{ form.email_template.id_for_label }}" class="label-text">{{ form.email_template.label }}</label>
+                    {{ form.email_template }} {% if form.email_template.help_text %}<p class="mt-1 text-xs text-gray-500">{{ form.email_template.help_text }}</p>{% endif %}
+                    {% for error in form.email_template.errors %}<p class="text-red-500 text-xs mt-1">{{ error }}</p>{% endfor %}
+                </div>
+                
+                <div>
+                    <label class="label-text">{{ form.contact_lists.label }}</label>
+                    <div class="mt-1 p-2 border border-gray-300 rounded-md bg-white shadow-sm" style="max-height: 150px; overflow-y: auto;">
+                        {{ form.contact_lists }} </div>
+                    {% if form.contact_lists.help_text %}<p class="mt-1 text-xs text-gray-500">{{ form.contact_lists.help_text }}</p>{% endif %}
+                    {% for error in form.contact_lists.errors %}<p class="text-red-500 text-xs mt-1">{{ error }}</p>{% endfor %}
+                </div>
+
+                <div>
+                    <label for="{{ form.scheduled_at.id_for_label }}" class="label-text">{{ form.scheduled_at.label }}</label>
+                    {{ form.scheduled_at }} {% if form.scheduled_at.help_text %}<p class="mt-1 text-xs text-gray-500">{{ form.scheduled_at.help_text }}</p>{% endif %}
+                    {% for error in form.scheduled_at.errors %}<p class="text-red-500 text-xs mt-1">{{ error }}</p>{% endfor %}
+                </div>
+
+                <div>
+                    <label for="{{ form.status.id_for_label }}" class="label-text">{{ form.status.label }}</label>
+                    {{ form.status }} {% if form.status.help_text %}<p class="mt-1 text-xs text-gray-500">{{ form.status.help_text }}</p>{% endif %}
+                    {% for error in form.status.errors %}<p class="text-red-500 text-xs mt-1">{{ error }}</p>{% endfor %}
+                </div>
+            </div>
+
+            <hr class="my-6">
+            <div class="flex justify-end space-x-3">
+                <a href="{% url 'mailer_app:manage_campaigns' %}" class="btn-secondary">Cancel</a>
+                <button type="submit" class="btn">
+                    {% if form.instance.pk %}Update Campaign{% else %}Create Campaign{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <div class="md:col-span-2 card"> <h2 class="text-xl font-semibold mb-4 text-indigo-700">Existing Campaigns</h2>
+        {% if campaigns %}
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Lists</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Template</th>
+                            <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        {% for campaign_item in campaigns %}
+                        <tr>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                <a href="{% url 'mailer_app:view_campaign' campaign_item.id %}" class="link">{{ campaign_item.name }}</a>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm">
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
+                                    {% if campaign_item.status == 'draft' %} bg-yellow-100 text-yellow-800
+                                    {% elif campaign_item.status == 'scheduled' %} bg-blue-100 text-blue-800
+                                    {% elif campaign_item.status == 'queued' %} bg-gray-100 text-gray-800
+                                    {% elif campaign_item.status == 'sending' %} bg-indigo-100 text-indigo-800
+                                    {% elif campaign_item.status == 'sent' %} bg-green-100 text-green-800
+                                    {% elif campaign_item.status == 'failed' %} bg-red-100 text-red-800
+                                    {% else %} bg-gray-100 text-gray-800 {% endif %}">
+                                    {{ campaign_item.get_status_display }}
+                                </span>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                {{ campaign_item.contact_lists.count }}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ campaign_item.email_template.name|default:"N/A" }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-center">
+                                <a href="{% url 'mailer_app:view_campaign' campaign_item.id %}" class="link">View/Send</a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="5" class="px-6 py-4 text-center text-sm text-gray-500">No campaigns found.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p class="text-gray-600">No campaigns have been created yet.</p>
+        {% endif %}
+    </div>
+</div>
+<style>
+    /* Additional styling for checkboxes if needed, to make them look better with Tailwind */
+    .form-check-input { /* Tailwind class for basic checkbox styling */
+        @apply shadow-sm focus:ring-indigo-500 h-4 w-4 text-indigo-600 border-gray-300 rounded;
+    }
+    label { /* Ensure labels align nicely with checkboxes */
+        @apply ml-2 text-sm text-gray-700;
+    }
+    /* Container for checkboxes to ensure they stack nicely if default widget doesn't */
+    .django-checkbox-list li {
+        @apply flex items-center mb-1;
+    }
+</style>
+{% endblock %}
+

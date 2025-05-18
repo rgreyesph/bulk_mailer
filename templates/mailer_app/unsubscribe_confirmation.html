@@ -1,0 +1,36 @@
+{% extends "mailer_app/base.html" %}
+
+{% block title %}Unsubscribe Status - Bulk Emailer{% endblock %}
+
+{% block page_title %}Unsubscribe Status{% endblock %}
+
+{% block content %}
+<div class="max-w-lg mx-auto">
+    <div class="card"> {% if success %}
+            <div class="alert alert-success"> <h5 class="font-semibold text-lg">Successfully Unsubscribed!</h5>
+                <p class="mb-0">{% autoescape off %}{{ confirmation_message }}{% endautoescape %}</p>
+                <p class="text-sm mb-0 mt-2">We're sorry to see you go. You can re-subscribe at any time through our website.</p>
+            </div>
+        {% elif success is None %} 
+            <div class="alert alert-info">
+                <h5 class="font-semibold text-lg">Already Unsubscribed</h5>
+                <p class="mb-0">{% autoescape off %}{{ confirmation_message }}{% endautoescape %}</p>
+                <p class="text-sm mb-0 mt-2">No further action is needed.</p>
+            </div>
+        {% else %} <div class="alert alert-danger">
+                 <h5 class="font-semibold text-lg">Unsubscribe Failed</h5>
+                <p class="mb-0">{{ message | default:"An error occurred. Could not process your unsubscribe request. Please try again or contact support." }}</p>
+            </div>
+        {% endif %}
+        <hr class="my-4">
+        <div class="text-center">
+            <a href="{% url 'mailer_app:dashboard' %}" class="btn">
+               Go to Homepage
+            </a>
+        </div>
+    </div>
+    <div class="text-center text-gray-500 text-sm mt-4">
+        Thank you for your understanding.
+    </div>
+</div>
+{% endblock %}

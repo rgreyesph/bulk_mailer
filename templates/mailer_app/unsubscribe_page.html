@@ -1,0 +1,54 @@
+{% extends "mailer_app/base.html" %} {% block title %}Confirm Unsubscription - Bulk Emailer{% endblock %}
+
+{% block page_title %}Confirm Unsubscription{% endblock %}
+
+{% block content %}
+<div class="max-w-lg mx-auto">
+    <div class="card"> {% if messages %}
+            <div class="mb-4 space-y-2">
+            {% for message in messages %}
+                <div class="alert {% if message.tags == 'success' %}alert-success{% elif message.tags == 'error' %}alert-danger{% elif message.tags == 'warning' %}alert-warning{% else %}alert-info{% endif %}" role="alert">
+                    <p class="font-medium">{{ message.tags|title }}: <span class="font-normal">{{ message }}</span></p>
+                </div>
+            {% endfor %}
+            </div>
+        {% endif %}
+
+        {% if contact and contact.subscribed %}
+            <p class="text-gray-700 mb-2">
+                Are you sure you want to unsubscribe <strong>{{ contact.email|default:"your email address" }}</strong> from our mailing list?
+            </p>
+            <p class="text-gray-500 text-sm mb-4">You will no longer receive marketing emails from us. Transactional emails (e.g., account updates, password resets) may still be sent if applicable.</p>
+            <hr class="my-4">
+            <form method="post" action="{% url 'mailer_app:unsubscribe_contact' token=token %}">
+                {% csrf_token %}
+                <button type="submit" class="btn-danger w-full mb-2 text-sm py-2.5">
+                    Yes, Unsubscribe Me
+                </button>
+                <a href="{% url 'mailer_app:dashboard' %}" class="btn-secondary w-full text-sm py-2.5 block text-center">
+                    No, Keep Me Subscribed
+                </a>
+            </form>
+        {% elif contact and not contact.subscribed %}
+             <div class="alert alert-info">
+                <p class="font-medium mb-0"><strong>{{ contact.email|default:"This email address" }}</strong> is already unsubscribed.</p>
+                <p class="text-sm mb-0">No further action is needed.</p>
+            </div>
+            <div class="text-center mt-4">
+                <a href="{% url 'mailer_app:dashboard' %}" class="btn">Go to Homepage</a>
+            </div>
+        {% else %}
+            <div class="alert alert-danger">
+                <p class="font-medium mb-0">Invalid Unsubscribe Request</p>
+                <p class="text-sm mb-0">{{ message|default:"The link may be incorrect or may have expired. If you believe this is an error, please contact support." }}</p>
+            </div>
+             <div class="text-center mt-4">
+                <a href="{% url 'mailer_app:keep_subscribed_thank_you' %}" class="btn-secondary w-full text-sm py-2.5 block text-center">
+            </div>
+        {% endif %}
+    </div>
+    <div class="text-center text-gray-500 text-sm mt-4">
+        If you have any concerns, please contact our support team.
+    </div>
+</div>
+{% endblock %}
