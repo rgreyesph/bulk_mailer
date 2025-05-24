@@ -1,23 +1,27 @@
-{% extends "mailer_app/base.html" %} {% block title %}Dashboard - Bulk Emailer{% endblock %}
+{% extends "mailer_app/base.html" %}
+{% load static %}
+
+{% block title %}Dashboard - Bulk Emailer{% endblock %}
 
 {% block page_title %}{{ title|default:"Dashboard" }}{% endblock %}
 
 {% block content %}
 <div class="space-y-8">
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <div class="card"> <h3 class="text-lg font-semibold text-indigo-700 mb-2">Total Contact Lists</h3>
-            <p class="text-3xl font-bold text-gray-800">{{ contact_lists.count|default:"0" }}</p>
-            <a href="{% url 'mailer_app:manage_contact_lists' %}" class="link mt-2 inline-block text-sm">Manage Lists &rarr;</a>
+        <div class="card">
+            <h3 class="text-lg font-semibold text-indigo-700 mb-2">Total Contact Lists</h3>
+            <p class="text-3xl font-bold text-gray-800">{{ total_contact_lists|default:"0" }}</p>
+            <a href="{% url 'mailer_app:manage_contact_lists' %}" class="link mt-2 inline-block text-sm" data-testid="link-manage-lists">Manage Lists →</a>
         </div>
         <div class="card">
             <h3 class="text-lg font-semibold text-indigo-700 mb-2">Total Email Templates</h3>
-            <p class="text-3xl font-bold text-gray-800">{{ email_templates.count|default:"0" }}</p>
-            <a href="{% url 'mailer_app:manage_email_templates' %}" class="link mt-2 inline-block text-sm">Manage Templates &rarr;</a>
+            <p class="text-3xl font-bold text-gray-800">{{ total_email_templates|default:"0" }}</p>
+            <a href="{% url 'mailer_app:manage_email_templates' %}" class="link mt-2 inline-block text-sm" data-testid="link-manage-templates">Manage Templates →</a>
         </div>
         <div class="card">
             <h3 class="text-lg font-semibold text-indigo-700 mb-2">Total Campaigns</h3>
-            <p class="text-3xl font-bold text-gray-800">{{ campaigns.count|default:"0" }}</p>
-            <a href="{% url 'mailer_app:manage_campaigns' %}" class="link mt-2 inline-block text-sm">Manage Campaigns &rarr;</a>
+            <p class="text-3xl font-bold text-gray-800">{{ total_campaigns|default:"0" }}</p>
+            <a href="{% url 'mailer_app:manage_campaigns' %}" class="link mt-2 inline-block text-sm" data-testid="link-manage-campaigns">Manage Campaigns →</a>
         </div>
     </div>
 
@@ -26,31 +30,31 @@
             <h3 class="text-xl font-semibold text-indigo-700 mb-4">Recent Contact Lists</h3>
             {% if contact_lists %}
                 <ul class="space-y-3">
-                    {% for list_item in contact_lists %} {# Renamed 'list' to 'list_item' to avoid conflict if context had 'list' #}
-                    <li class="border-b border-gray-200 pb-2 last:border-b-0 last:pb-0">
-                        <a href="{% url 'mailer_app:view_contact_list' list_item.id %}" class="link font-medium">{{ list_item.name }}</a>
+                    {% for list_item in contact_lists %}
+                    <li class="border-b border-gray-200 pb-3 mb-3 last:border-b-0 last:pb-0 last:mb-0">
+                        <a href="{% url 'mailer_app:view_contact_list' list_item.id %}" class="link font-medium" data-testid="link-contact-list-{{ list_item.id }}">{{ list_item.name }}</a>
                         <p class="text-sm text-gray-500">Contacts: {{ list_item.contacts.count }} | Created: {{ list_item.created_at|date:"M d, Y" }}</p>
                     </li>
                     {% endfor %}
                 </ul>
             {% else %}
-                <p class="text-gray-500">No contact lists yet.</p>
+                <p class="text-gray-600">No contact lists yet. <a href="{% url 'mailer_app:manage_contact_lists' %}" class="link" data-testid="link-create-contact-list">Create one?</a></p>
             {% endif %}
         </div>
 
         <div class="card">
             <h3 class="text-xl font-semibold text-indigo-700 mb-4">Recent Campaigns</h3>
             {% if campaigns %}
-                 <ul class="space-y-3">
-                    {% for campaign_item in campaigns %} {# Renamed 'campaign' to avoid conflict #}
-                    <li class="border-b border-gray-200 pb-2 last:border-b-0 last:pb-0">
-                        <a href="{% url 'mailer_app:view_campaign' campaign_item.id %}" class="link font-medium">{{ campaign_item.name }}</a>
+                <ul class="space-y-3">
+                    {% for campaign_item in campaigns %}
+                    <li class="border-b border-gray-200 pb-3 mb-3 last:border-b-0 last:pb-0 last:mb-0">
+                        <a href="{% url 'mailer_app:view_campaign' campaign_item.id %}" class="link font-medium" data-testid="link-campaign-{{ campaign_item.id }}">{{ campaign_item.name }}</a>
                         <p class="text-sm text-gray-500">Status: {{ campaign_item.get_status_display }} | Template: {{ campaign_item.email_template.name|default:"N/A" }}</p>
                     </li>
                     {% endfor %}
                 </ul>
             {% else %}
-                <p class="text-gray-500">No campaigns yet.</p>
+                <p class="text-gray-600">No campaigns yet. <a href="{% url 'mailer_app:manage_campaigns' %}" class="link" data-testid="link-create-campaign">Create one?</a></p>
             {% endif %}
         </div>
     </div>
@@ -58,27 +62,26 @@
     <div class="card">
         <h3 class="text-xl font-semibold text-indigo-700 mb-4">Recent Email Templates</h3>
         {% if email_templates %}
-             <ul class="space-y-3">
-                {% for template_item in email_templates %} {# Renamed 'template' to avoid conflict #}
-                <li class="border-b border-gray-200 pb-2 last:border-b-0 last:pb-0">
-                    <a href="{% url 'mailer_app:edit_email_template' template_item.id %}" class="link font-medium">{{ template_item.name }}</a>
+            <ul class="space-y-3">
+                {% for template_item in email_templates %}
+                <li class="border-b border-gray-200 pb-3 mb-3 last:border-b-0 last:pb-0 last:mb-0">
+                    <a href="{% url 'mailer_app:edit_email_template' template_item.id %}" class="link font-medium" data-testid="link-template-{{ template_item.id }}">{{ template_item.name }}</a>
                     <p class="text-sm text-gray-500 truncate">Subject: {{ template_item.subject|truncatechars:50 }}</p>
                 </li>
                 {% endfor %}
             </ul>
         {% else %}
-            <p class="text-gray-500">No email templates yet.</p>
+            <p class="text-gray-600">No email templates yet. <a href="{% url 'mailer_app:manage_email_templates' %}" class="link" data-testid="link-create-template">Create one?</a></p>
         {% endif %}
     </div>
 
     <div class="card mt-8">
         <h3 class="text-xl font-semibold text-indigo-700 mb-4">Quick Actions</h3>
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            <a href="{% url 'mailer_app:manage_contact_lists' %}" class="btn text-center py-3">Upload Contacts</a>
-            <a href="{% url 'mailer_app:manage_email_templates' %}" class="btn text-center py-3">Create New Template</a>
-            <a href="{% url 'mailer_app:manage_campaigns' %}" class="btn text-center py-3">Create New Campaign</a>
+            <a href="{% url 'mailer_app:manage_contact_lists' %}" class="btn w-full" style="background-color: #4f46e5; color: #ffffff;" data-testid="btn-upload-contacts">Upload Contacts</a>
+            <a href="{% url 'mailer_app:manage_email_templates' %}" class="btn w-full" style="background-color: #4f46e5; color: #ffffff;" data-testid="btn-create-template">Create New Template</a>
+            <a href="{% url 'mailer_app:manage_campaigns' %}" class="btn w-full" style="background-color: #4f46e5; color: #ffffff;" data-testid="btn-create-campaign">Create New Campaign</a>
         </div>
     </div>
-
 </div>
 {% endblock %}

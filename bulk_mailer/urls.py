@@ -1,12 +1,13 @@
-# bulk_mailer_project/urls.py (This is the project-level urls.py)
-
 from django.contrib import admin
-from django.urls import path, include # Make sure 'include' is imported
+from django.urls import path, include
+from django.contrib.auth import views as auth_views
+from mailer_app import views
+
+handler500 = 'mailer_app.views.custom_500'
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    # This is the crucial line:
-    # It tells Django that for any URL that isn't 'admin/',
-    # it should look for further URL patterns in 'mailer_app.urls'.
+    path('login/', auth_views.LoginView.as_view(template_name='mailer_app/login.html'), name='login'),
+    path('logout/', auth_views.LogoutView.as_view(), name='logout'),
     path('', include('mailer_app.urls')),
 ]

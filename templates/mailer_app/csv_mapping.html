@@ -1,0 +1,51 @@
+{% extends "mailer_app/base.html" %}
+
+{% block title %}Map CSV Fields - Bulk Emailer{% endblock %}
+
+{% block page_title %}Map CSV Fields for: {{ list_name }}{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto card">
+    <h2 class="text-xl font-semibold mb-4 text-indigo-700">Map CSV Columns to Contact Fields</h2>
+    <p class="text-sm text-gray-600 mb-4">
+        For each column header from your CSV file, select the corresponding contact field it should map to.
+        Use "Custom Field" to import data that doesn't fit standard fields.
+    </p>
+
+    <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        {{ form.csv_file.as_hidden }}
+        {{ form.contact_list_name.as_hidden }}
+        <input type="hidden" name="map_fields_submit" value="1"> <input type="hidden" name="csv_file_content" value="{{ csv_file_content }}"> <div class="space-y-4">
+            {% for header in csv_headers %}
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-center p-3 bg-gray-50 rounded-md">
+                <div>
+                    <label for="map_{{ header|slugify }}" class="block text-sm font-medium text-gray-700">
+                        CSV Header: <strong class="text-indigo-600">"{{ header }}"</strong>
+                    </label>
+                </div>
+                <div>
+                    <select name="map_{{ header }}" id="map_{{ header|slugify }}"
+                            class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                        <option value="ignore">Ignore this column</option>
+                        <option value="email" {% if header|lower == 'email' or header|lower == 'email address' %}selected{% endif %}>Email Address</option>
+                        <option value="first_name" {% if header|lower == 'first name' or header|lower == 'firstname' %}selected{% endif %}>First Name</option>
+                        <option value="last_name" {% if header|lower == 'last name' or header|lower == 'lastname' %}selected{% endif %}>Last Name</option>
+                        <option value="company" {% if header|lower == 'company' or header|lower == 'company name' %}selected{% endif %}>Company</option>
+                        <option value="job_title" {% if header|lower == 'job title' or header|lower == 'jobtitle' %}selected{% endif %}>Job Title</option>
+                        <option value="custom_field">Save as Custom Field (uses header name)</option>
+                        </select>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="mt-8 flex justify-end space-x-3">
+            <a href="{% url 'mailer_app:manage_contact_lists' %}" class="btn-secondary">Cancel</a>
+            <button type="submit" class="btn">
+                Import Contacts with this Mapping
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}

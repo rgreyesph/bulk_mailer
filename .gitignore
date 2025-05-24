@@ -129,3 +129,5 @@ staticfiles/ # Or a different name if you changed STATIC_ROOT
 *.swp
 *.swo
 *~
+
+postgres_data/

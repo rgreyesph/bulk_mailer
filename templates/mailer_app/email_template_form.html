@@ -1,77 +1,112 @@
-{% extends "mailer_app/base.html" %} {% block title %}{{ form_title|default:"Manage Email Templates" }} - Bulk Emailer{% endblock %}
+{% extends "mailer_app/base.html" %}
+
+{% block title %}{{ form_title|default:"Manage Email Templates" }} - Bulk Emailer{% endblock %}
 
 {% block page_title %}{{ form_title|default:"Manage Email Templates" }}{% endblock %}
 
 {% block content %}
 <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-    <div class="md:col-span-1 card"> <h2 class="text-xl font-semibold mb-4 text-indigo-700">
-            {% if instance %}Edit: {{ instance.name }}{% else %}Create New Template{% endif %}
+    <div class="md:col-span-2 card"> <h2 class="text-xl font-semibold mb-4 text-indigo-700">
+            {% if instance.pk %}Edit: {{ instance.name }}{% else %}Create New Template{% endif %}
         </h2>
-        <form method="post">
+        <form method="post" class="space-y-6">
             {% csrf_token %}
             
             {% if form.non_field_errors %}
-                <div class="mb-4 p-3 bg-red-100 text-red-700 rounded-md border border-red-300">
-                    {% for error in form.non_field_errors %}
-                        <p>{{ error }}</p>
-                    {% endfor %}
+                <div class="alert alert-danger">
+                    {% for error in form.non_field_errors %}<p>{{ error }}</p>{% endfor %}
                 </div>
             {% endif %}
 
-            <div class="space-y-4">
-                <div>
-                    <label for="{{ form.name.id_for_label }}" class="label-text">{{ form.name.label }}</label>
-                    {{ form.name }} {% if form.name.help_text %}<p class="mt-1 text-xs text-gray-500">{{ form.name.help_text }}</p>{% endif %}
-                    {% for error in form.name.errors %}<p class="text-red-500 text-xs mt-1">{{ error }}</p>{% endfor %}
-                </div>
-                <div>
-                    <label for="{{ form.subject.id_for_label }}" class="label-text">{{ form.subject.label }}</label>
-                    {{ form.subject }}
-                    {% if form.subject.help_text %}<p class="mt-1 text-xs text-gray-500">{{ form.subject.help_text }}</p>{% endif %}
-                    {% for error in form.subject.errors %}<p class="text-red-500 text-xs mt-1">{{ error }}</p>{% endfor %}
-                </div>
-                <div>
-                    <label for="{{ form.html_content.id_for_label }}" class="label-text">{{ form.html_content.label }}</label>
-                    {{ form.html_content }}
-                    {% if form.html_content.help_text %}<p class="mt-1 text-xs text-gray-500">{{ form.html_content.help_text }}</p>{% endif %}
-                    {% for error in form.html_content.errors %}<p class="text-red-500 text-xs mt-1">{{ error }}</p>{% endfor %}
-                </div>
-                <p class="text-xs text-gray-500">
-                    Available standard merge tags: <code>{{unsubscribe_url}}</code>, <code>{{first_name}}</code>, <code>{{last_name}}</code>, <code>{{email}}</code>, <code>{{company}}</code>, <code>{{job_title}}</code>.
-                    <br>Additional tags from your CSV (e.g., <code>{{your_custom_field}}</code>) can also be used if present in the contact data.
-                </p>
+            <div>
+                <label for="{{ form.name.id_for_label }}" class="label-text">{{ form.name.label }}</label>
+                {{ form.name }}
+                {% if form.name.help_text %}<p class="mt-1 text-xs text-gray-500">{{ form.name.help_text }}</p>{% endif %}
+                {% for error in form.name.errors %}<p class="text-red-500 text-xs mt-1">{{ error }}</p>{% endfor %}
             </div>
-            <button type="submit" class="btn mt-6 w-full">
-                {% if instance %}Update Template{% else %}Create Template{% endif %}
-            </button>
-            {% if instance %}
-                <a href="{% url 'mailer_app:manage_email_templates' %}" class="btn-secondary mt-2 w-full block text-center">Cancel Edit</a>
-            {% endif %}
+
+            <div>
+                <label for="{{ form.subject.id_for_label }}" class="label-text">{{ form.subject.label }}</label>
+                {{ form.subject }}
+                {% if form.subject.help_text %}<p class="mt-1 text-xs text-gray-500">{{ form.subject.help_text }}</p>{% endif %}
+                {% for error in form.subject.errors %}<p class="text-red-500 text-xs mt-1">{{ error }}</p>{% endfor %}
+            </div>
+
+            <div>
+                <label for="{{ form.html_content.id_for_label }}" class="label-text">{{ form.html_content.label }}</label>
+                {{ form.html_content }}
+                {% if form.html_content.help_text %}<p class="mt-1 text-xs text-gray-500">{{ form.html_content.help_text|safe }}</p>{% endif %}
+                {% for error in form.html_content.errors %}<p class="text-red-500 text-xs mt-1">{{ error }}</p>{% endfor %}
+            </div>
+
+            <div>
+                <label for="{{ form.footer_html.id_for_label }}" class="label-text">{{ form.footer_html.label }} (Includes Unsubscribe Link)</label>
+                {{ form.footer_html }}
+                {% if form.footer_html.help_text %}
+                    <p class="mt-1 text-xs text-gray-500">{{ form.footer_html.help_text|safe }}</p>
+                {% else %}
+                    {# Display current value or initial default if field is empty. #}
+                    {# form.fields.footer_html.initial should give the model's default. #}
+                    <p class="mt-1 text-xs text-gray-500">
+                        Current/Default footer (edit above if needed):
+                        <code class="block whitespace-pre-wrap bg-gray-100 p-1 border rounded text-gray-700">{{ form.footer_html.value|default_if_none:form.fields.footer_html.initial|escape }}</code>
+                    </p>
+                {% endif %}
+                {% for error in form.footer_html.errors %}<p class="text-red-500 text-xs mt-1">{{ error }}</p>{% endfor %}
+            </div>
+            
+            <p class="text-sm text-gray-600">
+                <strong>Available standard merge tags:</strong><br>
+                <code>{{unsubscribe_url}}</code>, <code>{{first_name}}</code>, <code>{{last_name}}</code>, <code>{{email}}</code>,
+                <code>{{company}}</code>, <code>{{job_title}}</code>, <code>{{your_company_name}}</code>, <code>{{company_address}}</code>, <code>{{site_url}}</code>.
+                <br>Additional tags from your CSV (e.g., <code>{{your_custom_field}}</code>) can also be used if present in the contact data.
+            </p>
+
+            <div class="flex flex-wrap items-center justify-start gap-3 pt-4">
+                <button type="submit" class="btn">
+                    {% if instance.pk %}Update Template{% else %}Create Template{% endif %}
+                </button>
+                <a href="{% url 'mailer_app:manage_email_templates' %}" class="btn-secondary">
+                    {% if instance.pk %}Back to Templates List{% else %}Cancel Creation{% endif %}
+                </a>
+                {% if instance.pk %} {# Only show "Preview This Template" button if editing an existing template #}
+                <a href="{% url 'mailer_app:preview_email_template_page' instance.id %}" class="btn bg-blue-500 hover:bg-blue-600" target="_blank">
+                    Preview This Template
+                </a>
+                {% endif %}
+            </div>
         </form>
     </div>
 
-    <div class="md:col-span-2 card"> <h2 class="text-xl font-semibold mb-4 text-indigo-700">Existing Email Templates</h2>
+    <div class="md:col-span-1 card"> <h2 class="text-xl font-semibold mb-4 text-indigo-700">Existing Templates</h2>
+        {% comment %} 
+            The 'templates' variable in the context for this part of the page 
+            is passed by the manage_email_templates view.
+            When on the edit_email_template view, this list might be empty or not passed,
+            which is fine as the focus is the edit form.
+            The updated edit_email_template view in this response now also passes 'templates'.
+        {% endcomment %}
         {% if templates %}
             <div class="overflow-x-auto">
                 <table class="min-w-full divide-y divide-gray-200">
                     <thead class="bg-gray-50">
                         <tr>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subject</th>
-                            <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Subject</th>
+                            <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Actions</th>
                         </tr>
                     </thead>
                     <tbody class="bg-white divide-y divide-gray-200">
-                        {% for tpl in templates %}
+                        {% for tpl_item in templates %}
                         <tr>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                <a href="{% url 'mailer_app:edit_email_template' tpl.id %}" class="link">{{ tpl.name }}</a>
+                            <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                                <a href="{% url 'mailer_app:edit_email_template' tpl_item.id %}" class="link">{{ tpl_item.name }}</a>
                             </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 truncate max-w-xs">{{ tpl.subject }}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-center">
-                                <a href="{% url 'mailer_app:preview_email_template_page' tpl.id %}" class="text-blue-600 hover:text-blue-900 mr-3">Preview</a>
-                                <a href="{% url 'mailer_app:edit_email_template' tpl.id %}" class="text-indigo-600 hover:text-indigo-900 mr-3">Edit</a>
-                                <form action="{% url 'mailer_app:delete_email_template' tpl.id %}" method="post" class="inline" onsubmit="return confirm('Are you sure you want to delete this email template?');">
+                            <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500 truncate max-w-xs">{{ tpl_item.subject }}</td>
+                            <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-center space-x-2">
+                                <a href="{% url 'mailer_app:preview_email_template_page' tpl_item.id %}" class="text-blue-600 hover:text-blue-900" target="_blank">Preview</a>
+                                <a href="{% url 'mailer_app:edit_email_template' tpl_item.id %}" class="text-indigo-600 hover:text-indigo-900">Edit</a>
+                                <form action="{% url 'mailer_app:delete_email_template' tpl_item.id %}" method="post" class="inline" onsubmit="return confirm('Are you sure you want to delete this email template: \'{{ tpl_item.name|escapejs }}\'?');">
                                     {% csrf_token %}
                                     <button type="submit" class="text-red-600 hover:text-red-900">Delete</button>
                                 </form>
@@ -79,14 +114,20 @@
                         </tr>
                         {% empty %}
                         <tr>
-                            <td colspan="3" class="px-6 py-4 text-center text-sm text-gray-500">No email templates found.</td>
+                            <td colspan="3" class="px-4 py-3 text-center text-sm text-gray-500">No email templates found.</td>
                         </tr>
                         {% endfor %}
                     </tbody>
                 </table>
             </div>
         {% else %}
-            <p class="text-gray-600">No email templates have been created yet.</p>
+            {% if request.resolver_match.url_name == 'manage_email_templates' %}
+                <p class="text-gray-600">No email templates have been created yet. Use the form on the left to create one.</p>
+            {% elif instance.pk %}
+                 <p class="text-gray-600">
+                    <a href="{% url 'mailer_app:manage_email_templates' %}" class="link">View all templates</a>.
+                </p>
+            {% endif %}
         {% endif %}
     </div>
 </div>

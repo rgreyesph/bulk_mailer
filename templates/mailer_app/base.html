@@ -3,120 +3,492 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}Bulk Emailer{% endblock %}</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <title>{% block title %}Bulk Emailer{% endblock %} - Herkings</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <style>
-        body {
-            font-family: 'Inter', sans-serif;
-        }
-        /* Custom scrollbar for webkit browsers */
-        ::-webkit-scrollbar {
-            width: 8px;
-            height: 8px;
-        }
-        ::-webkit-scrollbar-track {
-            background: #f1f1f1;
-            border-radius: 10px;
-        }
-        ::-webkit-scrollbar-thumb {
-            background: #888;
-            border-radius: 10px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-            background: #555;
-        }
-        /* Tailwind @apply directives for custom components */
-        .btn {
-            @apply inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition ease-in-out duration-150;
-        }
-        .btn-secondary {
-            @apply inline-flex items-center justify-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition ease-in-out duration-150;
-        }
-        .btn-danger {
-            @apply inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition ease-in-out duration-150;
-        }
-        .link {
-            @apply text-indigo-600 hover:text-indigo-800 hover:underline;
-        }
+        /* Base Card Style */
         .card {
-            @apply bg-white shadow-lg rounded-xl p-6;
+            background-color: #ffffff;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            border-radius: 0.5rem;
+            padding: 1.5rem;
         }
-        .input-field {
-             @apply mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm;
+
+        /* Base Button Styles */
+        .btn-base {
+            display: inline-block;
+            font-weight: 500;
+            border-radius: 0.375rem;
+            font-size: 0.875rem;
+            text-align: center;
+            transition: all 0.15s ease-in-out;
+            outline: none;
         }
+        .btn-base:focus {
+            box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.2);
+        }
+        .btn-base:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Primary Action Button */
+        .btn, .btn-primary {
+            background-color: #4f46e5 !important;
+            color: #ffffff !important;
+            padding: 0.5rem 1rem;
+            border: none;
+        }
+        .btn:hover, .btn-primary:hover {
+            background-color: #4338ca !important;
+            transform: scale(1.05);
+        }
+        .btn:active, .btn-primary:active {
+            transform: scale(0.95);
+        }
+        .btn:focus, .btn-primary:focus {
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.5);
+        }
+        .btn:disabled:hover, .btn-primary:disabled:hover {
+            background-color: #4f46e5 !important;
+        }
+
+        /* Secondary Action Button */
+        .btn-secondary {
+            background-color: #e5e7eb !important;
+            color: #1f2937 !important;
+            padding: 0.5rem 1rem;
+            border: 1px solid #d1d5db;
+        }
+        .btn-secondary:hover {
+            background-color: #d1d5db !important;
+            transform: scale(1.05);
+        }
+        .btn-secondary:active {
+            transform: scale(0.95);
+        }
+        .btn-secondary:focus {
+            box-shadow: 0 0 0 3px rgba(209, 213, 219, 0.5);
+        }
+        .btn-secondary:disabled:hover {
+            background-color: #e5e7eb !important;
+        }
+
+        /* Copy Button */
+        .btn-copy {
+            background-color: #f3f4f6 !important;
+            color: #374151 !important;
+            padding: 0.375rem 0.625rem;
+            border: 1px solid #d1d5db;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            position: relative;
+        }
+        .btn-copy:hover {
+            background-color: #e5e7eb !important;
+            transform: scale(1.05);
+        }
+        .btn-copy:active {
+            transform: scale(0.95);
+        }
+        .btn-copy:focus {
+            box-shadow: 0 0 0 3px rgba(209, 213, 219, 0.5);
+        }
+        .btn-copy:hover::after {
+            content: 'Copy URL';
+            position: absolute;
+            top: -2rem;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #374151;
+            color: #ffffff;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+            font-size: 0.75rem;
+            white-space: nowrap;
+            z-index: 10;
+        }
+
+        /* Smaller Button Variant */
+        .btn-sm {
+            padding: 0.375rem 0.75rem;
+            font-size: 0.75rem;
+        }
+
+        /* Alert Styles */
+        .alert {
+            padding: 1rem;
+            border-radius: 0.375rem;
+            border: 1px solid;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: flex-start;
+        }
+        .alert-icon {
+            flex-shrink: 0;
+            width: 1.25rem;
+            height: 1.25rem;
+            margin-right: 0.75rem;
+        }
+        .alert-success {
+            background-color: #f0fdf4;
+            color: #166534;
+            border-color: #bbf7d0;
+        }
+        .alert-success .alert-icon {
+            color: #4ade80;
+        }
+        .alert-danger {
+            background-color: #fef2f2;
+            color: #991b1b;
+            border-color: #fecaca;
+        }
+        .alert-danger .alert-icon {
+            color: #f87171;
+        }
+        .alert-info {
+            background-color: #eff6ff;
+            color: #1e40af;
+            border-color: #bfdbfe;
+        }
+        .alert-info .alert-icon {
+            color: #60a5fa;
+        }
+        .alert-warning {
+            background-color: #fefce8;
+            color: #854d0e;
+            border-color: #fef08a;
+        }
+        .alert-warning .alert-icon {
+            color: #facc15;
+        }
+
+        /* Link Style */
+        .link {
+            color: #4f46e5;
+            text-decoration: none;
+        }
+        .link:hover {
+            color: #4338ca;
+            text-decoration: underline;
+        }
+
+        /* Form Label Style */
         .label-text {
-            @apply block text-sm font-medium text-gray-700;
+            display: block;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: #374151;
+            margin-bottom: 0.25rem;
         }
-        .invalid-feedback.d-block { 
+
+        /* General Form Input Styling */
+        input[type="text"],
+        input[type="password"],
+        input[type="email"],
+        input[type="url"],
+        input[type="number"],
+        input[type="datetime-local"],
+        select,
+        textarea {
+            margin-top: 0.25rem;
             display: block;
             width: 100%;
-            margin-top: .25rem;
-            font-size: .875em;
-            color: #dc3545; /* Standard Bootstrap error color, consider Tailwind's text-red-600 */
+            padding: 0.5rem 0.75rem;
+            background-color: #ffffff;
+            border: 1px solid #d1d5db;
+            border-radius: 0.375rem;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+            outline: none;
+            font-size: 0.875rem;
         }
-        .form-check {
-            margin-bottom: 0.5rem;
+        input[type="text"]:focus,
+        input[type="password"]:focus,
+        input[type="email"]:focus,
+        input[type="url"]:focus,
+        input[type="number"]:focus,
+        input[type="datetime-local"]:focus,
+        select:focus,
+        textarea:focus {
+            border-color: #4f46e5;
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.5);
+        }
+        input[type="file"] {
             display: block;
+            width: 100%;
+            font-size: 0.875rem;
+            color: #111827;
+            border: 1px solid #d1d5db;
+            border-radius: 0.375rem;
+            cursor: pointer;
+            background-color: #f9fafb;
+            padding: 0.625rem;
+            outline: none;
         }
-        .form-check-input { margin-right: 0.5em; }
-        .alert { @apply p-4 mb-4 text-sm rounded-lg; }
-        .alert-success { @apply bg-green-50 text-green-700 border-l-4 border-green-400; }
-        .alert-danger { @apply bg-red-50 text-red-700 border-l-4 border-red-400; }
-        .alert-warning { @apply bg-yellow-50 text-yellow-700 border-l-4 border-yellow-400; }
-        .alert-info { @apply bg-blue-50 text-blue-700 border-l-4 border-blue-400; }
+        input[type="checkbox"] {
+            width: 1rem;
+            height: 1rem;
+            color: #4f46e5;
+            border: 1px solid #d1d5db;
+            border-radius: 0.25rem;
+            margin-right: 0.5rem;
+            vertical-align: middle;
+        }
+        input[type="checkbox"]:focus {
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.5);
+        }
+
+        /* Navigation Link Styles */
+        .nav-link {
+            color: #e0e7ff;
+            padding: 0.5rem 0.75rem;
+            border-radius: 0.375rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+            transition: all 0.15s ease-in-out;
+            text-decoration: none;
+            display: inline-block;
+        }
+        .nav-link:hover {
+            background-color: #4f46e5;
+            color: #ffffff;
+        }
+        .nav-link-active {
+            background-color: #3730a3 !important;
+            color: #ffffff !important;
+        }
+
+        /* Mobile Navigation Link Styles */
+        .mobile-nav-link {
+            color: #e0e7ff;
+            display: block;
+            padding: 0.75rem 1rem;
+            border-radius: 0.375rem;
+            font-size: 1rem;
+            font-weight: 500;
+            transition: all 0.15s ease-in-out;
+            text-decoration: none;
+        }
+        .mobile-nav-link:hover {
+            background-color: #4f46e5;
+            color: #ffffff;
+        }
+        .mobile-nav-link-active {
+            background-color: #3730a3 !important;
+            color: #ffffff !important;
+        }
+
+        /* Dropdown Menu Styles */
+        .dropdown-menu {
+            background-color: #ffffff;
+            border: 1px solid #e5e7eb;
+            border-radius: 0.375rem;
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+            padding: 0.5rem 0;
+            min-width: 180px;
+            max-width: calc(100vw - 2rem);
+            opacity: 0;
+            transform: translateY(-10px);
+            transition: opacity 0.2s ease-in-out, transform 0.2s ease-in-out;
+            position: absolute;
+            top: calc(100% + 4px);
+            left: 0;
+            z-index: 100;
+        }
+        .dropdown-menu.open {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        .dropdown-link {
+            display: block;
+            padding: 0.5rem 0.75rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: #374151;
+            text-decoration: none;
+            transition: all 0.2s ease-in-out;
+        }
+        .dropdown-link:hover {
+            background-color: #e0e7ff;
+            color: #4f46e5;
+            border-radius: 0.25rem;
+        }
+        .dropdown-link.active {
+            background-color: #e0e7ff;
+            color: #4f46e5;
+            font-weight: 600;
+        }
+
+        /* Chevron Animation */
+        .chevron {
+            transition: transform 0.2s ease-in-out;
+        }
+        .chevron.open {
+            transform: rotate(180deg);
+        }
+
+        /* Mobile Menu Animation */
+        #mobile-menu {
+            transition: max-height 0.3s ease-in-out, opacity 0.3s ease-in-out;
+            max-height: 0;
+            opacity: 0;
+            overflow: hidden;
+        }
+        #mobile-menu:not(.hidden) {
+            max-height: 1000px;
+            opacity: 1;
+        }
+
+        /* Table Row Hover */
+        tbody tr:hover {
+            background-color: #f9fafb;
+        }
+
+        /* Copied Feedback */
+        .copy-feedback {
+            display: none;
+            background-color: #f0fdf4;
+            color: #166534;
+            font-size: 0.75rem;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+            margin-left: 0.5rem;
+        }
+        .copy-feedback.show {
+            display: inline;
+        }
+
+        /* Fallback for Tailwind utilities */
+        .flex { display: flex; }
+        .hidden { display: none; }
+        .md\:flex { display: flex; }
+        @media (max-width: 767px) {
+            .md\:flex { display: none; }
+            .md\:hidden { display: block; }
+        }
     </style>
 </head>
-<body class="bg-gray-100 text-gray-800">
-    <nav class="bg-indigo-700 shadow-lg">
+<body class="bg-gray-100 font-sans antialiased text-gray-800 flex flex-col min-h-screen">
+    <nav class="bg-indigo-700 text-white shadow-md print:hidden" role="navigation" aria-label="Main navigation">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex items-center justify-between h-16">
                 <div class="flex items-center">
-                    <a href="{% url 'mailer_app:dashboard' %}" class="text-2xl font-bold text-white">BulkMail<span class="text-indigo-300">Herkings</span></a>
-                </div>
-                <div class="hidden md:block">
-                    <div class="ml-10 flex items-baseline space-x-4">
-                        <a href="{% url 'mailer_app:dashboard' %}" class="text-gray-200 hover:bg-indigo-600 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Dashboard</a>
-                        <a href="{% url 'mailer_app:manage_contact_lists' %}" class="text-gray-200 hover:bg-indigo-600 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Contact Lists</a>
-                        <a href="{% url 'mailer_app:manage_email_templates' %}" class="text-gray-200 hover:bg-indigo-600 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Templates</a>
-                        <a href="{% url 'mailer_app:manage_campaigns' %}" class="text-gray-200 hover:bg-indigo-600 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Campaigns</a>
+                    <div class="flex-shrink-0">
+                        <a href="{% url 'mailer_app:dashboard' %}" class="text-2xl font-bold tracking-tight hover:text-indigo-200" data-testid="logo">BulkMailer</a>
                     </div>
                 </div>
+                <div class="hidden md:flex md:items-center md:space-x-2">
+                    <a href="{% url 'mailer_app:dashboard' %}" class="nav-link {% if request.resolver_match and request.resolver_match.view_name == 'mailer_app:dashboard' %}nav-link-active{% endif %}" aria-current="{% if request.resolver_match and request.resolver_match.view_name == 'mailer_app:dashboard' %}page{% else %}false{% endif %}" data-testid="nav-dashboard">Dashboard</a>
+                    <a href="{% url 'mailer_app:manage_contact_lists' %}" class="nav-link {% if request.resolver_match and request.resolver_match.view_name|slice:':20' == 'mailer_app:manage_contact' or request.resolver_match.view_name|slice:':20' == 'mailer_app:view_contact' or request.resolver_match.view_name|slice:':20' == 'mailer_app:add_contact' or request.resolver_match.view_name|slice:':20' == 'mailer_app:edit_contact' %}nav-link-active{% endif %}" aria-current="{% if request.resolver_match and request.resolver_match.view_name|slice:':20' == 'mailer_app:manage_contact' %}page{% else %}false{% endif %}" data-testid="nav-contacts">Contacts</a>
+                    <a href="{% url 'mailer_app:manage_email_templates' %}" class="nav-link {% if request.resolver_match and request.resolver_match.view_name|slice:':20' == 'mailer_app:manage_email_t' or request.resolver_match.view_name|slice:':20' == 'mailer_app:edit_email_te' or request.resolver_match.view_name|slice:':20' == 'mailer_app:preview_email' %}nav-link-active{% endif %}" aria-current="{% if request.resolver_match and request.resolver_match.view_name|slice:':20' == 'mailer_app:manage_email_t' %}page{% else %}false{% endif %}" data-testid="nav-templates">Templates</a>
+                    <a href="{% url 'mailer_app:manage_campaigns' %}" class="nav-link {% if request.resolver_match and request.resolver_match.view_name|slice:':20' == 'mailer_app:manage_campaig' or request.resolver_match.view_name|slice:':20' == 'mailer_app:view_campaign' %}nav-link-active{% endif %}" aria-current="{% if request.resolver_match and request.resolver_match.view_name|slice:':20' == 'mailer_app:manage_campaig' %}page{% else %}false{% endif %}" data-testid="nav-campaigns">Campaigns</a>
+                    
+                    <div class="relative" data-testid="nav-media">
+                        <button type="button" class="nav-link inline-flex items-center flex-nowrap {% if request.resolver_match and request.resolver_match.url_name == 'upload_media' or request.resolver_match.url_name == 'manage_media_assets' %}nav-link-active{% endif %}" aria-expanded="false" aria-haspopup="true" aria-controls="media-dropdown" data-testid="nav-media-button">
+                            <span>Media</span>
+                            <svg class="chevron ml-0.5 h-4 w-4 text-indigo-200 align-middle" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                                <path fill-rule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clip-rule="evenodd" />
+                            </svg>
+                        </button>
+                        <div class="dropdown-menu" id="media-dropdown" role="menu" aria-labelledby="nav-media-button" data-testid="nav-media-dropdown">
+                            <a href="{% url 'mailer_app:upload_media' %}" class="dropdown-link {% if request.resolver_match and request.resolver_match.url_name == 'upload_media' %}active{% endif %}" data-testid="nav-upload-media">Upload Media</a>
+                            <a href="{% url 'mailer_app:manage_media_assets' %}" class="dropdown-link {% if request.resolver_match and request.resolver_match.url_name == 'manage_media_assets' %}active{% endif %}" data-testid="nav-manage-media">Manage Media</a>
+                        </div>
+                    </div>
+
+                    <a href="{% url 'mailer_app:analytics' %}" class="nav-link {% if request.resolver_match and request.resolver_match.url_name == 'analytics' %}nav-link-active{% endif %}" aria-current="{% if request.resolver_match and request.resolver_match.url_name == 'analytics' %}page{% else %}false{% endif %}" data-testid="nav-analytics">Analytics</a>
+                    <a href="{% url 'mailer_app:manage_settings' %}" class="nav-link {% if request.resolver_match and request.resolver_match.url_name == 'manage_settings' %}nav-link-active{% endif %}" aria-current="{% if request.resolver_match and request.resolver_match.url_name == 'manage_settings' %}page{% else %}false{% endif %}" data-testid="nav-settings">Settings</a>
+                </div>
+                <div class="hidden md:flex md:items-center">
+                    {% if user.is_authenticated %}
+                        <span class="text-sm text-indigo-200 mr-3">Hi, {{ user.get_full_name|default:user.username }}!</span>
+                        <form action="{% url 'logout' %}" method="post" class="inline">
+                            {% csrf_token %}
+                            <button type="submit" class="btn-secondary btn-sm" data-testid="btn-logout">Logout</button>
+                        </form>
+                    {% else %}
+                        <a href="{% url 'login' %}" class="btn-secondary btn-sm" data-testid="btn-login">Login</a>
+                    {% endif %}
+                </div>
                 <div class="-mr-2 flex md:hidden">
-                    <button type="button" class="bg-indigo-700 inline-flex items-center justify-center p-2 rounded-md text-indigo-200 hover:text-white hover:bg-indigo-600 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-white" aria-controls="mobile-menu" aria-expanded="false">
+                    <button type="button" id="mobile-menu-button" class="bg-indigo-700 inline-flex items-center justify-center p-2 rounded-md text-indigo-200 hover:text-white hover:bg-indigo-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-indigo-700 focus:ring-white" aria-controls="mobile-menu" aria-expanded="false" data-testid="mobile-menu-toggle">
                         <span class="sr-only">Open main menu</span>
-                        <svg class="block h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
-                        </svg>
-                        <svg class="hidden h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                        </svg>
+                        <svg id="icon-menu" class="block h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" /></svg>
+                        <svg id="icon-close" class="hidden h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
                     </button>
                 </div>
             </div>
         </div>
-        <div class="md:hidden" id="mobile-menu">
-            <div class="px-2 pt-2 pb-3 space-y-1 sm:px-3">
-                <a href="{% url 'mailer_app:dashboard' %}" class="text-gray-200 hover:bg-indigo-600 hover:text-white block px-3 py-2 rounded-md text-base font-medium">Dashboard</a>
-                <a href="{% url 'mailer_app:manage_contact_lists' %}" class="text-gray-200 hover:bg-indigo-600 hover:text-white block px-3 py-2 rounded-md text-base font-medium">Contact Lists</a>
-                <a href="{% url 'mailer_app:manage_email_templates' %}" class="text-gray-200 hover:bg-indigo-600 hover:text-white block px-3 py-2 rounded-md text-base font-medium">Templates</a>
-                <a href="{% url 'mailer_app:manage_campaigns' %}" class="text-gray-200 hover:bg-indigo-600 hover:text-white block px-3 py-2 rounded-md text-base font-medium">Campaigns</a>
+
+        <div class="md:hidden hidden" id="mobile-menu" role="menu" aria-label="Mobile navigation">
+            <div class="px-4 pt-2 pb-3 space-y-2 sm:px-6">
+                <a href="{% url 'mailer_app:dashboard' %}" class="mobile-nav-link {% if request.resolver_match and request.resolver_match.view_name == 'mailer_app:dashboard' %}mobile-nav-link-active{% endif %}" aria-current="{% if request.resolver_match and request.resolver_match.view_name == 'mailer_app:dashboard' %}page{% else %}false{% endif %}" data-testid="mobile-nav-dashboard">Dashboard</a>
+                <a href="{% url 'mailer_app:manage_contact_lists' %}" class="mobile-nav-link {% if request.resolver_match and request.resolver_match.view_name|slice:':20' == 'mailer_app:manage_contact' or request.resolver_match.view_name|slice:':20' == 'mailer_app:view_contact' or request.resolver_match.view_name|slice:':20' == 'mailer_app:add_contact' or request.resolver_match.view_name|slice:':20' == 'mailer_app:edit_contact' %}mobile-nav-link-active{% endif %}" aria-current="{% if request.resolver_match and request.resolver_match.view_name|slice:':20' == 'mailer_app:manage_contact' %}page{% else %}false{% endif %}" data-testid="mobile-nav-contacts">Contacts</a>
+                <a href="{% url 'mailer_app:manage_email_templates' %}" class="mobile-nav-link {% if request.resolver_match and request.resolver_match.view_name|slice:':20' == 'mailer_app:manage_email_t' or request.resolver_match.view_name|slice:':20' == 'mailer_app:edit_email_te' or request.resolver_match.view_name|slice:':20' == 'mailer_app:preview_email' %}mobile-nav-link-active{% endif %}" aria-current="{% if request.resolver_match and request.resolver_match.view_name|slice:':20' == 'mailer_app:manage_email_t' %}page{% else %}false{% endif %}" data-testid="mobile-nav-templates">Templates</a>
+                <a href="{% url 'mailer_app:manage_campaigns' %}" class="mobile-nav-link {% if request.resolver_match and request.resolver_match.view_name|slice:':20' == 'mailer_app:manage_campaig' or request.resolver_match.view_name|slice:':20' == 'mailer_app:view_campaign' %}mobile-nav-link-active{% endif %}" aria-current="{% if request.resolver_match and request.resolver_match.view_name|slice:':20' == 'mailer_app:manage_campaig' %}page{% else %}false{% endif %}" data-testid="mobile-nav-campaigns">Campaigns</a>
+                <a href="{% url 'mailer_app:upload_media' %}" class="mobile-nav-link {% if request.resolver_match and request.resolver_match.url_name == 'upload_media' %}mobile-nav-link-active{% endif %}" aria-current="{% if request.resolver_match and request.resolver_match.url_name == 'upload_media' %}page{% else %}false{% endif %}" data-testid="mobile-nav-upload-media">Upload Media</a>
+                <a href="{% url 'mailer_app:manage_media_assets' %}" class="mobile-nav-link {% if request.resolver_match and request.resolver_match.url_name == 'manage_media_assets' %}mobile-nav-link-active{% endif %}" aria-current="{% if request.resolver_match and request.resolver_match.url_name == 'manage_media_assets' %}page{% else %}false{% endif %}" data-testid="mobile-nav-manage-media">Manage Media</a>
+                <a href="{% url 'mailer_app:analytics' %}" class="mobile-nav-link {% if request.resolver_match and request.resolver_match.url_name == 'analytics' %}mobile-nav-link-active{% endif %}" aria-current="{% if request.resolver_match and request.resolver_match.url_name == 'analytics' %}page{% else %}false{% endif %}" data-testid="mobile-nav-analytics">Analytics</a>
+                <a href="{% url 'mailer_app:manage_settings' %}" class="mobile-nav-link {% if request.resolver_match and request.resolver_match.url_name == 'manage_settings' %}mobile-nav-link-active{% endif %}" aria-current="{% if request.resolver_match and request.resolver_match.url_name == 'manage_settings' %}page{% else %}false{% endif %}" data-testid="mobile-nav-settings">Settings</a>
+            </div>
+            <div class="pt-4 pb-3 border-t border-indigo-600">
+                {% if user.is_authenticated %}
+                <div class="flex items-center px-5">
+                    <div class="ml-0">
+                        <div class="text-base font-medium leading-none text-white">{{ user.get_full_name|default:user.username }}</div>
+                        {% if user.email %}<div class="text-sm font-medium leading-none text-indigo-300 mt-1">{{ user.email }}</div>{% endif %}
+                    </div>
+                </div>
+                <div class="mt-3 px-4 space-y-2">
+                    <form action="{% url 'logout' %}" method="post">
+                        {% csrf_token %}
+                        <button type="submit" class="w-full text-left mobile-nav-link" data-testid="mobile-nav-logout">Logout</button>
+                    </form>
+                </div>
+                {% else %}
+                <div class="px-4 space-y-2">
+                    <a href="{% url 'login' %}" class="mobile-nav-link" data-testid="mobile-nav-login">Login</a>
+                </div>
+                {% endif %}
             </div>
         </div>
     </nav>
 
-    <main class="py-10">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <h1 class="text-3xl font-semibold text-gray-900 mb-6">{% block page_title %}{{ title|default:"Bulk Emailer" }}{% endblock %}</h1>
+    <header class="bg-white shadow-sm print:hidden">
+        <div class="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8">
+            <h1 class="text-xl sm:text-2xl font-semibold text-gray-800 leading-tight">
+                {% block page_title %}Bulk Emailer{% endblock %}
+            </h1>
+        </div>
+    </header>
 
+    <main class="flex-grow">
+        <div class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
             {% if messages %}
-                <div class="mb-6 space-y-2">
+            <div class="mb-6 space-y-3">
                 {% for message in messages %}
-                    <div class="alert {% if message.tags == 'success' %}alert-success{% elif message.tags == 'error' %}alert-danger{% elif message.tags == 'warning' %}alert-warning{% else %}alert-info{% endif %}" role="alert">
-                        <p class="font-medium">{{ message.tags|title }}: <span class="font-normal">{{ message }}</span></p>
+                <div class="alert
+                    {% if message.tags == 'success' %}alert-success{% elif message.tags == 'error' %}alert-danger{% elif message.tags == 'warning' %}alert-warning{% else %}alert-info{% endif %}"
+                    role="alert">
+                    <div class="alert-icon">
+                        {% if message.tags == 'success' %}<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" /></svg>
+                        {% elif message.tags == 'error' %}<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l-1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" /></svg>
+                        {% elif message.tags == 'info' %}<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" /></svg>
+                        {% elif message.tags == 'warning' %}<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8.257 3.099c.626-1.162 2.361-1.162 2.988 0l5.542 10.283c.604 1.12-.22 2.503-1.493 2.503H4.208c-1.274 0-2.098-1.383-1.494-2.503L8.257 3.099zM10 6a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 6zm0 8a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd" /></svg>
+                        {% endif %}
                     </div>
-                {% endfor %}
+                    <div class="ml-3 flex-1">
+                        <p class="text-sm font-medium {% if message.tags == 'success' %}text-green-800{% elif message.tags == 'error' %}text-red-800{% elif message.tags == 'warning' %}text-yellow-800{% else %}text-blue-800{% endif %}">
+                            {{ message.tags|title }}
+                        </p>
+                        <div class="text-sm {% if message.tags == 'success' %}text-green-700{% elif message.tags == 'error' %}text-red-700{% elif message.tags == 'warning' %}text-yellow-700{% else %}text-blue-700{% endif %}">
+                            {{ message|safe }}
+                        </div>
+                    </div>
                 </div>
+                {% endfor %}
+            </div>
             {% endif %}
 
             {% block content %}
@@ -124,24 +496,155 @@
         </div>
     </main>
 
-    <footer class="bg-gray-800 text-white text-center p-6 mt-12">
-        <p>&copy; {% now "Y" %} Bulk Mailer by Herkings Corporation</p>
+    <footer class="bg-white shadow-sm mt-auto py-6 print:hidden">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-sm text-gray-500">
+            © {% now "Y" %} Bulk Mailer by Herkings Corporation. All rights reserved.
+        </div>
     </footer>
 
     {% block extra_js %}
-    {% endblock %}
     <script>
-        // Basic mobile menu toggle
-        const mobileMenuButton = document.querySelector('nav button[aria-controls="mobile-menu"]');
+        // Debounce utility to prevent rapid clicks
+        function debounce(func, wait) {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func(...args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
+        }
+
+        // Mobile menu toggle
+        const mobileMenuButton = document.getElementById('mobile-menu-button');
         const mobileMenu = document.getElementById('mobile-menu');
-        if (mobileMenuButton && mobileMenu) {
-            mobileMenuButton.addEventListener('click', function() {
-                const expanded = this.getAttribute('aria-expanded') === 'true' || false;
-                this.setAttribute('aria-expanded', !expanded);
+        const iconMenu = document.getElementById('icon-menu');
+        const iconClose = document.getElementById('icon-close');
+
+        if (mobileMenuButton && mobileMenu && iconMenu && iconClose) {
+            mobileMenuButton.addEventListener('click', () => {
+                const isExpanded = mobileMenuButton.getAttribute('aria-expanded') === 'true';
+                mobileMenuButton.setAttribute('aria-expanded', !isExpanded);
                 mobileMenu.classList.toggle('hidden');
-                this.querySelectorAll('svg').forEach(svg => svg.classList.toggle('hidden'));
+                iconMenu.classList.toggle('hidden');
+                iconClose.classList.toggle('hidden');
             });
         }
+
+        // Dropdown menu toggle
+        const mediaButton = document.querySelector('[data-testid="nav-media-button"]');
+        const dropdownMenu = document.querySelector('[data-testid="nav-media-dropdown"]');
+        const chevron = document.querySelector('.chevron');
+
+        if (mediaButton && dropdownMenu && chevron) {
+            const toggleDropdown = debounce(() => {
+                const isExpanded = mediaButton.getAttribute('aria-expanded') === 'true';
+                mediaButton.setAttribute('aria-expanded', !isExpanded);
+                dropdownMenu.classList.toggle('open');
+                chevron.classList.toggle('open');
+            }, 200);
+
+            // Toggle on click
+            mediaButton.addEventListener('click', (e) => {
+                e.preventDefault();
+                toggleDropdown();
+            });
+
+            // Toggle on Enter or Space for accessibility
+            mediaButton.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    toggleDropdown();
+                }
+                if (e.key === 'ArrowDown' && mediaButton.getAttribute('aria-expanded') === 'true') {
+                    e.preventDefault();
+                    const firstLink = dropdownMenu.querySelector('.dropdown-link');
+                    if (firstLink) firstLink.focus();
+                }
+            });
+
+            // Navigate dropdown links with arrow keys
+            const dropdownLinks = dropdownMenu.querySelectorAll('.dropdown-link');
+            dropdownLinks.forEach((link, index) => {
+                link.addEventListener('keydown', (e) => {
+                    if (e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        const nextIndex = (index + 1) % dropdownLinks.length;
+                        dropdownLinks[nextIndex].focus();
+                    }
+                    if (e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        const prevIndex = (index - 1 + dropdownLinks.length) % dropdownLinks.length;
+                        dropdownLinks[prevIndex].focus();
+                    }
+                    if (e.key === 'Escape') {
+                        mediaButton.setAttribute('aria-expanded', 'false');
+                        dropdownMenu.classList.remove('open');
+                        chevron.classList.remove('open');
+                        mediaButton.focus();
+                    }
+                });
+            });
+
+            // Close dropdown when clicking a link
+            dropdownLinks.forEach(link => {
+                link.addEventListener('click', () => {
+                    mediaButton.setAttribute('aria-expanded', 'false');
+                    dropdownMenu.classList.remove('open');
+                    chevron.classList.remove('open');
+                });
+            });
+
+            // Close dropdown when clicking outside
+            document.addEventListener('click', (e) => {
+                if (!mediaButton.contains(e.target) && !dropdownMenu.contains(e.target)) {
+                    mediaButton.setAttribute('aria-expanded', 'false');
+                    dropdownMenu.classList.remove('open');
+                    chevron.classList.remove('open');
+                }
+            });
+
+            // Close dropdown on Escape key
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') {
+                    mediaButton.setAttribute('aria-expanded', 'false');
+                    dropdownMenu.classList.remove('open');
+                    chevron.classList.remove('open');
+                }
+            });
+        }
+
+        // Copy URL functionality
+        document.querySelectorAll('.btn-copy').forEach(button => {
+            button.addEventListener('click', () => {
+                const url = button.getAttribute('data-url');
+                const feedback = button.nextElementSibling;
+                if (navigator.clipboard) {
+                    navigator.clipboard.writeText(url).then(() => {
+                        feedback.classList.add('show');
+                        setTimeout(() => {
+                            feedback.classList.remove('show');
+                        }, 1500);
+                    }).catch(err => {
+                        console.error('Failed to copy URL:', err);
+                    });
+                } else {
+                    const textarea = document.createElement('textarea');
+                    textarea.value = url;
+                    document.body.appendChild(textarea);
+                    textarea.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(textarea);
+                    feedback.classList.add('show');
+                    setTimeout(() => {
+                        feedback.classList.remove('show');
+                    }, 1500);
+                }
+            });
+        });
     </script>
+    {% endblock %}
 </body>
 </html>

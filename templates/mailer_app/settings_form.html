@@ -1,0 +1,64 @@
+{% extends "mailer_app/base.html" %}
+
+{% block title %}{{ title|default:"Manage Settings" }} - Bulk Emailer{% endblock %}
+
+{% block page_title %}{{ title|default:"Application Settings" }}{% endblock %}
+
+{% block content %}
+<div class="max-w-xl mx-auto card">
+    <h2 class="text-xl font-semibold mb-6 text-indigo-700">Configure Global Settings</h2>
+    <form method="post" class="space-y-6">
+        {% csrf_token %}
+        
+        {% if form.non_field_errors %}
+            <div class="alert alert-danger">
+                {% for error in form.non_field_errors %}<p>{{ error }}</p>{% endfor %}
+            </div>
+        {% endif %}
+
+        <div>
+            <label for="{{ form.sender_email.id_for_label }}" class="label-text">{{ form.sender_email.label }}</label>
+            {{ form.sender_email }} {% if form.sender_email.help_text %}
+                <p class="mt-1 text-xs text-gray-500">{{ form.sender_email.help_text }}</p>
+            {% endif %}
+            {% for error in form.sender_email.errors %}
+                <p class="text-red-500 text-xs mt-1">{{ error }}</p>
+            {% endfor %}
+        </div>
+
+        <div>
+            <label for="{{ form.company_name.id_for_label }}" class="label-text">{{ form.company_name.label }}</label>
+            {{ form.company_name }} {% if form.company_name.help_text %}
+                <p class="mt-1 text-xs text-gray-500">{{ form.company_name.help_text }}</p>
+            {% endif %}
+            {% for error in form.company_name.errors %}
+                <p class="text-red-500 text-xs mt-1">{{ error }}</p>
+            {% endfor %}
+        </div>
+
+        <div>
+            <label for="{{ form.company_address.id_for_label }}" class="label-text">{{ form.company_address.label|default:"Company Address" }}</label>
+            {{ form.company_address }} {% if form.company_address.help_text %}
+                <p class="mt-1 text-xs text-gray-500">{{ form.company_address.help_text }}</p>
+            {% endif %}
+            {% for error in form.company_address.errors %}
+                <p class="text-red-500 text-xs mt-1">{{ error }}</p>
+            {% endfor %}
+        </div>
+        
+        <div>
+            <label for="{{ form.site_url.id_for_label }}" class="label-text">{{ form.site_url.label|default:"Site URL" }}</label>
+            {{ form.site_url }} {% if form.site_url.help_text %}
+                <p class="mt-1 text-xs text-gray-500">{{ form.site_url.help_text }}</p>
+            {% endif %}
+            {% for error in form.site_url.errors %}
+                <p class="text-red-500 text-xs mt-1">{{ error }}</p>
+            {% endfor %}
+        </div>
+
+        <div>
+            <button type="submit" class="btn w-full">Save Settings</button>
+        </div>
+    </form>
+</div>
+{% endblock %}

@@ -1,227 +1,416 @@
 # mailer_app/views.py
 import csv
 import io
-import uuid # Import uuid for token generation
+import uuid
+import os 
+import logging
+
 from django.shortcuts import render, redirect, get_object_or_404
-from django.http import HttpResponse, JsonResponse, Http404 
+from django.http import HttpResponse, Http404
 from django.contrib import messages
-from django.core.mail import send_mail, BadHeaderError
+from django.core.mail import send_mail
 from django.template import Context, Template as DjangoTemplate, TemplateSyntaxError
-from django.conf import settings
+from django.conf import settings as django_settings 
 from django.utils.html import strip_tags, escape
 from django.utils import timezone
-from django.db.models import Count, F
-from django.views.decorators.clickjacking import xframe_options_sameorigin # <<< IMPORT ADDED HERE
+from django.views.decorators.clickjacking import xframe_options_sameorigin
+from django.contrib.auth.decorators import login_required
+from django.urls import reverse
+from django.contrib.sites.shortcuts import get_current_site
+from django.core.files.storage import default_storage
+from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 
-from .models import Contact, ContactList, EmailTemplate, Campaign, CampaignSendLog
-from .forms import CSVImportForm, EmailTemplateForm, CampaignForm, SendTestEmailForm
 
-from django.urls import reverse 
-from django.contrib.sites.models import Site 
+from .models import (
+    Contact, ContactList, EmailTemplate, Campaign, CampaignSendLog, 
+    Settings as AppSettings, MediaAsset
+)
+from .forms import (
+    CSVImportForm, EmailTemplateForm, CampaignForm, SendTestEmailForm, 
+    ContactForm, SettingsForm, MediaUploadForm
+)
 
-import logging
 logger = logging.getLogger(__name__)
 
-# --- Helper Functions ---
+# Helper Functions
 def _render_email_content(template_html, context_data):
-    """Renders email HTML content with given context data."""
     django_tpl = DjangoTemplate(template_html)
     context = Context(context_data)
     return django_tpl.render(context)
 
-def _get_sample_context(contact_list_instance=None):
-    """Provides sample context data for previews. Includes new fields."""
+def _get_sample_context(request, contact_list_instance=None):
+    settings_obj = AppSettings.load()
+    company_name_from_settings = settings_obj.company_name if settings_obj else "Your Company"
+    company_address_from_settings = settings_obj.company_address if settings_obj else "123 Main St, Anytown"
+    site_url_from_settings = settings_obj.site_url if settings_obj else f"{request.scheme}://{request.get_host()}"
+
+    dummy_token = uuid.uuid4() 
+    unsubscribe_url_for_sample = "#"
+    protocol = request.scheme
+    domain = request.get_host() 
+
+    try:
+        current_site_obj = get_current_site(request)
+        domain = current_site_obj.domain
+        path = reverse('mailer_app:unsubscribe_contact', kwargs={'token': str(dummy_token)})
+        unsubscribe_url_for_sample = f"{protocol}://{domain}{path}"
+    except Exception as e:
+        logger.warning(f"Could not generate sample unsubscribe URL using Site framework: {e}")
+        try:
+            path = reverse('mailer_app:unsubscribe_contact', kwargs={'token': str(dummy_token)})
+            unsubscribe_url_for_sample = f"{protocol}://{request.get_host()}{path}"
+        except Exception as e_fallback:
+            logger.error(f"Fallback sample unsubscribe URL generation failed: {e_fallback}")
+            unsubscribe_url_for_sample = f"{protocol}://{request.get_host()}/unsubscribe-link-error/{dummy_token}/"
+
     sample_data = {
-        "email": "john.doe@example.com",
-        "first_name": "John",
-        "last_name": "Doe",
-        "company": "Example Inc.",
-        "job_title": "Chief Tester",
-        "unsubscribe_url": "#", # Placeholder for unsubscribe URL in previews
+        "email": "john.doe@example.com", "first_name": "John", "last_name": "Doe",
+        "company": "Example Inc.", "job_title": "Chief Tester",
+        "unsubscribe_url": unsubscribe_url_for_sample,
         "custom_field_example": "Sample Custom Value",
-        "your_company_name": getattr(settings, 'YOUR_COMPANY_NAME', "Your Company")
+        "your_company_name": company_name_from_settings,
+        "company_address": company_address_from_settings,
+        "site_url": site_url_from_settings,
+        "tracking_pixel": "#" 
     }
     if contact_list_instance:
         first_contact = contact_list_instance.contacts.all().first()
         if first_contact:
-            sample_data["email"] = first_contact.email or sample_data["email"]
-            sample_data["first_name"] = first_contact.first_name or sample_data["first_name"]
-            sample_data["last_name"] = first_contact.last_name or sample_data["last_name"]
-            sample_data["company"] = first_contact.company or sample_data["company"]
-            sample_data["job_title"] = first_contact.job_title or sample_data["job_title"]
+            sample_data.update({
+                "email": first_contact.email or sample_data["email"],
+                "first_name": first_contact.first_name or sample_data["first_name"],
+                "last_name": first_contact.last_name or sample_data["last_name"],
+                "company": first_contact.company or sample_data["company"],
+                "job_title": first_contact.job_title or sample_data["job_title"],
+            })
             if first_contact.custom_fields:
                 for key, value in first_contact.custom_fields.items():
-                    if key not in ["email", "first_name", "last_name", "company", "job_title"]:
+                    if key not in sample_data:
                         sample_data[key] = value or f"Sample {key.replace('_', ' ').title()}"
     return sample_data
 
 
 # --- Dashboard ---
+@login_required
 def dashboard(request):
     contact_lists_qs = ContactList.objects.all().order_by('-created_at')[:5]
     email_templates_qs = EmailTemplate.objects.all().order_by('-created_at')[:5]
     campaigns_qs = Campaign.objects.all().order_by('-created_at')[:5]
+    total_contact_lists = ContactList.objects.count()
+    total_email_templates = EmailTemplate.objects.count()
+    total_campaigns = Campaign.objects.count()
     context = {
-        'contact_lists': contact_lists_qs,
-        'email_templates': email_templates_qs,
-        'campaigns': campaigns_qs,
+        'contact_lists': contact_lists_qs, 'email_templates': email_templates_qs,
+        'campaigns': campaigns_qs, 'total_contact_lists': total_contact_lists,
+        'total_email_templates': total_email_templates, 'total_campaigns': total_campaigns,
         'title': "Dashboard",
-        'settings_module': settings, # Pass settings module if needed in template for some reason
     }
     return render(request, 'mailer_app/dashboard.html', context)
 
-# --- Contact List Management ---
+# --- Contact Lists & Contacts ---
+@login_required
 def manage_contact_lists(request):
+    # This view remains unchanged by the current sorting feature for individual contact lists.
+    # Its existing logic for listing ContactList objects and CSV import is preserved.
     contact_lists_qs = ContactList.objects.all().order_by('-created_at')
     if request.method == 'POST':
         form = CSVImportForm(request.POST, request.FILES)
-        if form.is_valid():
-            csv_file = request.FILES['csv_file']
+        if 'map_fields_submit' in request.POST:
+            list_name = request.POST.get('contact_list_name')
+            csv_file_content_str = request.POST.get('csv_file_content')
+
+            if not list_name or not csv_file_content_str:
+                messages.error(request, "Missing list name or CSV data. Please start over.")
+                return redirect('mailer_app:manage_contact_lists')
+
+            io_string = io.StringIO(csv_file_content_str)
+            reader = csv.reader(io_string)
+            headers = next(reader, None)
+            io_string.seek(0) 
+            dict_reader = csv.DictReader(io_string)
+
+            new_contact_list, created = ContactList.objects.get_or_create(name=list_name)
+            if not created:
+                messages.info(request, f"Adding contacts to existing list: '{list_name}'.")
+            
+            contacts_to_create = []
+            contacts_updated_count = 0 # Not currently used for update, but for potential future logic
+            contacts_skipped_email_missing = 0
+            contacts_skipped_duplicate = 0
+            
+            field_mappings = {h: request.POST.get(f'map_{h}', 'ignore') for h in headers}
+            
+            email_header_key = None
+            for header, mapped_field in field_mappings.items():
+                if mapped_field == 'email':
+                    email_header_key = header
+                    break
+            
+            if not email_header_key:
+                messages.error(request, "No CSV column was mapped to 'Email Address'. Cannot import.")
+                # Consider re-rendering csv_mapping.html with an error message
+                # For now, redirecting to the main list management page.
+                return redirect('mailer_app:manage_contact_lists')
+
+
+            for row_index, row in enumerate(dict_reader):
+                contact_data = {'contact_list': new_contact_list, 'subscribed': True}
+                custom_fields_dict = {}
+                email_val = row.get(email_header_key, '').strip()
+                
+                # Basic email validation could be added here if desired (e.g., using Django's EmailValidator)
+                if not email_val: 
+                    contacts_skipped_email_missing += 1
+                    continue
+                contact_data['email'] = email_val
+
+                for header, mapped_field_key in field_mappings.items():
+                    if header == email_header_key or mapped_field_key == 'ignore': # Email already handled or field ignored
+                        continue
+                    original_value = row.get(header, '').strip()
+                    if not original_value: # Skip empty values for other fields
+                        continue
+
+                    if mapped_field_key in ['first_name', 'last_name', 'company', 'job_title']:
+                        contact_data[mapped_field_key] = original_value
+                    elif mapped_field_key == 'custom_field':
+                        # Sanitize custom field key from header
+                        custom_field_name = header.lower().replace(' ', '_').replace('-', '_')
+                        # Basic sanitization, ensure it's a valid identifier-like string
+                        custom_field_name = ''.join(c if c.isalnum() or c == '_' else '' for c in custom_field_name)
+                        if custom_field_name: # Ensure key is not empty after sanitization
+                            custom_fields_dict[custom_field_name] = original_value
+                
+                if custom_fields_dict:
+                    contact_data['custom_fields'] = custom_fields_dict
+
+                # Check for existing contact by email in this list to avoid duplicates
+                existing_contact = Contact.objects.filter(email=email_val, contact_list=new_contact_list).first()
+                if existing_contact:
+                    contacts_skipped_duplicate += 1
+                    continue # Skip creating a duplicate contact in the same list
+                
+                contacts_to_create.append(Contact(**contact_data))
+
+            if contacts_to_create:
+                Contact.objects.bulk_create(contacts_to_create, ignore_conflicts=False) # ignore_conflicts=False to raise error on DB level if unique constraints violated
+
+            msg_parts = [f'{len(contacts_to_create)} new contacts imported to "{list_name}".']
+            if contacts_skipped_email_missing > 0: msg_parts.append(f"{contacts_skipped_email_missing} rows skipped (missing/invalid email).")
+            if contacts_skipped_duplicate > 0: msg_parts.append(f"{contacts_skipped_duplicate} skipped (duplicate email in this list).")
+            messages.success(request, " ".join(msg_parts))
+            return redirect('mailer_app:view_contact_list', list_id=new_contact_list.id)
+
+        elif form.is_valid(): # Initial CSV upload, show mapping form
+            csv_file_uploaded = request.FILES['csv_file']
             list_name = form.cleaned_data['contact_list_name']
 
-            if not csv_file.name.endswith('.csv'):
-                messages.error(request, 'Invalid file type. Please upload a CSV file.')
-                return redirect('mailer_app:manage_contact_lists') # Use namespaced redirect
-
-            new_contact_list = None # Initialize to ensure it's defined
+            if not csv_file_uploaded.name.endswith('.csv'):
+                messages.error(request, 'Please upload a valid CSV file.')
+                return redirect('mailer_app:manage_contact_lists')
             try:
-                new_contact_list = ContactList.objects.create(name=list_name)
-                decoded_file = csv_file.read().decode('utf-8-sig')
-                io_string = io.StringIO(decoded_file)
-
-                # Get original fieldnames robustly
-                temp_reader_for_headers = csv.reader(io.StringIO(decoded_file))
-                try:
-                    original_fieldnames = [h.strip() for h in next(temp_reader_for_headers)]
-                    if not original_fieldnames: # Handle case where header row is empty
-                        raise StopIteration 
-                except StopIteration:
-                    if new_contact_list and new_contact_list.pk: new_contact_list.delete()
-                    messages.error(request, "CSV file appears to be empty or has no header row.")
-                    return redirect('mailer_app:manage_contact_lists')
-                del temp_reader_for_headers
-                io_string.seek(0) # Reset for DictReader
-                
-                # Provide fieldnames to DictReader to handle various CSV quirks
-                reader = csv.DictReader(io_string, fieldnames=[h.strip() for h in original_fieldnames])
-                
-                # Normalize headers from the original fieldnames for checking 'email'
-                normalized_original_headers = [h.lower().replace(' ', '_').strip() for h in original_fieldnames]
-                if 'email' not in normalized_original_headers:
-                    if new_contact_list and new_contact_list.pk: new_contact_list.delete()
-                    messages.error(request, "CSV file must contain an 'email' column header.")
-                    return redirect('mailer_app:manage_contact_lists')
-
-                contacts_to_create = []
-                
-                first_row = True # To help with skipping header if DictReader didn't
-                for row_data in reader:
-                    # This check is a bit fragile; relies on DictReader behavior with provided fieldnames
-                    if first_row and all(row_data.get(h.strip()) == h.strip() for h in original_fieldnames):
-                        first_row = False
-                        continue 
-                    first_row = False
-
-
-                    normalized_row = {} # Process current row
-                    for original_header, value in row_data.items():
-                        # Ensure original_header is a string before calling lower(), replace(), strip()
-                        if isinstance(original_header, str):
-                            normalized_key = original_header.lower().replace(' ', '_').strip()
-                            normalized_row[normalized_key] = value.strip() if value else ''
-                        else:
-                            # Handle case where a header might not be a string (e.g. None if CSV is malformed)
-                            # Or log a warning, skip this header, etc.
-                            logger.warning(f"Skipping non-string header in CSV: {original_header}")
-
-
-                    email = normalized_row.get('email', '').strip()
-                    if not email:
-                        # messages.warning(request, f"Skipped CSV row due to missing email.") # Avoid too many messages
-                        continue
-                    
-                    # Generate unsubscribe_token before adding to bulk_create list
-                    unsubscribe_token = uuid.uuid4()
-
-                    contacts_to_create.append(Contact(
-                        contact_list=new_contact_list, email=email,
-                        first_name=normalized_row.get('first_name', ''),
-                        last_name=normalized_row.get('last_name', ''),
-                        company=normalized_row.get('company', ''),
-                        job_title=normalized_row.get('job_title', ''),
-                        custom_fields={k:v for k,v in normalized_row.items() if k not in ['email','first_name','last_name','company','job_title'] and v},
-                        subscribed=True,
-                        unsubscribe_token=unsubscribe_token # Assign generated token
-                    ))
-                if contacts_to_create:
-                    Contact.objects.bulk_create(contacts_to_create)
-                    messages.success(request, f'{len(contacts_to_create)} contacts imported to "{list_name}".')
-                else:
-                    messages.warning(request, f"No new contacts imported to '{list_name}'.")
+                decoded_file = csv_file_uploaded.read().decode('utf-8-sig')
+            except UnicodeDecodeError:
+                messages.error(request, "Could not decode CSV file. Please ensure it's UTF-8 encoded.")
                 return redirect('mailer_app:manage_contact_lists')
-            except Exception as e:
-                if new_contact_list and new_contact_list.pk: new_contact_list.delete()
-                messages.error(request, f'Error processing CSV: {e}.')
+
+            io_string = io.StringIO(decoded_file)
+            reader = csv.reader(io_string)
+            headers = next(reader, None)
+
+            if not headers:
+                messages.error(request, "CSV file is empty or has no headers.")
                 return redirect('mailer_app:manage_contact_lists')
-    else:
+            
+            return render(request, 'mailer_app/csv_mapping.html', {
+                'form': form, # Pass the original form to pre-fill list_name and keep file info if needed
+                'list_name': list_name,
+                'csv_headers': headers,
+                'csv_file_content': decoded_file, # Pass content for the mapping step
+                'title': "Map CSV Fields"
+            })
+        else: 
+            # Form is invalid (e.g., no file uploaded, or list name missing)
+            # Errors will be displayed by the form rendering in the template
+            pass # Let it fall through to render the form with errors
+    else: # GET request
         form = CSVImportForm()
 
     return render(request, 'mailer_app/contact_list_form.html', {
-        'form': form, 'contact_lists': contact_lists_qs, 'title': "Manage Contact Lists"
+        'form': form, 
+        'contact_lists': contact_lists_qs, 
+        'title': "Manage Contact Lists"
     })
 
+
+@login_required
 def view_contact_list(request, list_id):
     contact_list_obj = get_object_or_404(ContactList, id=list_id)
-    contacts_qs = contact_list_obj.contacts.all()
-    return render(request, 'mailer_app/view_contact_list.html', {
-        'contact_list': contact_list_obj, 'contacts': contacts_qs, 'title': f"View List: {contact_list_obj.name}"
-    })
+    logger.info(f"Viewing contact list ID: {list_id}, Name: {contact_list_obj.name}")
 
+    # --- Sorting Logic ---
+    allowed_sort_fields = ['email', 'first_name', 'last_name', 'subscribed', 'created_at']
+    sort_by_param = request.GET.get('sort_by', 'email') # Default sort by email
+    order_param = request.GET.get('order', 'asc')       # Default order ascending
+
+    # Validate sort_by parameter
+    if sort_by_param not in allowed_sort_fields:
+        sort_by = 'email' # Fallback to default if invalid sort field
+        logger.warning(f"Invalid sort_by parameter '{sort_by_param}', defaulting to 'email'.")
+    else:
+        sort_by = sort_by_param
+    
+    # Validate order parameter
+    if order_param not in ['asc', 'desc']:
+        order = 'asc' # Fallback to default order
+        logger.warning(f"Invalid order parameter '{order_param}', defaulting to 'asc'.")
+    else:
+        order = order_param
+
+    order_prefix = '' if order == 'asc' else '-'
+    order_by_field = f"{order_prefix}{sort_by}"
+    
+    all_contacts_qs = contact_list_obj.contacts.all().order_by(order_by_field)
+    # --- End Sorting Logic ---
+
+    pre_pagination_count = all_contacts_qs.count()
+    logger.info(f"Found {pre_pagination_count} contacts for list {list_id} before pagination (sorted by {order_by_field}).")
+
+    paginator = Paginator(all_contacts_qs, 25) # Show 25 contacts per page
+    page_number = request.GET.get('page')
+    logger.info(f"Requested page number: {page_number}")
+
+    try:
+        contacts_page_obj = paginator.page(page_number)
+    except PageNotAnInteger:
+        # If page is not an integer, deliver first page.
+        contacts_page_obj = paginator.page(1)
+    except EmptyPage:
+        # If page is out of range (e.g. 9999), deliver last page of results.
+        contacts_page_obj = paginator.page(paginator.num_pages)
+    
+    logger.info(f"Serving page {contacts_page_obj.number} with {len(contacts_page_obj.object_list)} contacts. Total pages: {paginator.num_pages}.")
+
+    context = {
+        'contact_list': contact_list_obj,
+        'contacts_page_obj': contacts_page_obj,
+        'current_sort_by': sort_by, # Pass current sort field to template
+        'current_order': order,     # Pass current sort order to template
+        'title': f"View List: {contact_list_obj.name}"
+    }
+    return render(request, 'mailer_app/view_contact_list.html', context)
+
+@login_required
 def delete_contact_list(request, list_id):
     contact_list_obj = get_object_or_404(ContactList, id=list_id)
     if request.method == 'POST':
         list_name = contact_list_obj.name
         contact_list_obj.delete()
-        messages.success(request, f"Contact list '{list_name}' deleted.")
+        messages.success(request, f"Contact list '{list_name}' and all its contacts deleted.")
         return redirect('mailer_app:manage_contact_lists')
     messages.warning(request, "Deletion must be confirmed via POST.")
     return redirect('mailer_app:manage_contact_lists')
 
+@login_required
+def add_contact(request, list_id):
+    contact_list = get_object_or_404(ContactList, id=list_id)
+    if request.method == 'POST':
+        form = ContactForm(request.POST)
+        if form.is_valid():
+            contact = form.save(commit=False)
+            contact.contact_list = contact_list
+            try:
+                contact.save()
+                messages.success(request, f"Contact {contact.email} added to {contact_list.name}.")
+                return redirect('mailer_app:view_contact_list', list_id=list_id)
+            except Exception as e: 
+                messages.error(request, f"Could not add contact. Error: {e}")
+        else:
+            messages.error(request, "Could not add contact. Please check errors below.")
+    else:
+        form = ContactForm(initial={'contact_list': contact_list})
+    return render(request, 'mailer_app/contact_form.html', {
+        'form': form, 'contact_list': contact_list, 'title': f"Add Contact to {contact_list.name}"
+    })
+
+@login_required
+def edit_contact(request, contact_id):
+    contact = get_object_or_404(Contact, id=contact_id)
+    contact_list_for_redirect = contact.contact_list 
+    if request.method == 'POST':
+        form = ContactForm(request.POST, instance=contact)
+        if form.is_valid():
+            form.save()
+            messages.success(request, f"Contact {contact.email} updated.")
+            if contact_list_for_redirect:
+                return redirect('mailer_app:view_contact_list', list_id=contact_list_for_redirect.id)
+            return redirect('mailer_app:dashboard') 
+        else:
+            messages.error(request, "Could not update contact. Please check errors below.")
+    else:
+        form = ContactForm(instance=contact)
+    return render(request, 'mailer_app/contact_form.html', {
+        'form': form, 'contact': contact, 'contact_list': contact_list_for_redirect, 
+        'title': f"Edit Contact: {contact.email}"
+    })
+
+@login_required
+def delete_contact(request, contact_id):
+    contact = get_object_or_404(Contact, id=contact_id)
+    contact_list_id_for_redirect = contact.contact_list.id if contact.contact_list else None
+    if request.method == 'POST':
+        contact_email = contact.email
+        contact.delete()
+        messages.success(request, f"Contact '{contact_email}' has been deleted.")
+        if contact_list_id_for_redirect:
+            return redirect('mailer_app:view_contact_list', list_id=contact_list_id_for_redirect)
+        return redirect('mailer_app:manage_contact_lists') 
+    messages.warning(request, "Deletion must be confirmed via the delete button.")
+    if contact_list_id_for_redirect:
+        return redirect('mailer_app:view_contact_list', list_id=contact_list_id_for_redirect)
+    return redirect('mailer_app:manage_contact_lists')
+
+# --- Email Templates ---
+@login_required
 def manage_email_templates(request):
     templates_qs = EmailTemplate.objects.all().order_by('-created_at')
     if request.method == 'POST':
         form = EmailTemplateForm(request.POST)
         if form.is_valid():
-            form.save()
-            messages.success(request, 'Email template created.')
-            return redirect('mailer_app:manage_email_templates')
+            new_template = form.save()
+            messages.success(request, f"Email template '{new_template.name}' created. You can now edit or preview it.")
+            return redirect('mailer_app:edit_email_template', template_id=new_template.id)
         else:
-            messages.error(request, "Could not create template. Errors below.")
+            messages.error(request, "Could not create template. Please check errors.")
     else:
         form = EmailTemplateForm()
-    return render(request, 'mailer_app/email_template_form.html', {
+    context = {
         'form': form, 'templates': templates_qs,
         'title': "Manage Email Templates", 'form_title': "Create New Template"
-    })
+    }
+    return render(request, 'mailer_app/email_template_form.html', context)
 
+@login_required
 def edit_email_template(request, template_id):
     template_instance = get_object_or_404(EmailTemplate, id=template_id)
-    templates_qs = EmailTemplate.objects.all().order_by('-created_at')
+    templates_qs = EmailTemplate.objects.all().order_by('-created_at') 
     if request.method == 'POST':
         form = EmailTemplateForm(request.POST, instance=template_instance)
         if form.is_valid():
             form.save()
             messages.success(request, f"Template '{template_instance.name}' updated.")
-            return redirect('mailer_app:manage_email_templates')
+            return redirect('mailer_app:edit_email_template', template_id=template_instance.id)
         else:
-            messages.error(request, f"Could not update '{template_instance.name}'. Errors below.")
+            messages.error(request, f"Could not update '{template_instance.name}'. Check errors.")
     else:
         form = EmailTemplateForm(instance=template_instance)
-    return render(request, 'mailer_app/email_template_form.html', {
-        'form': form, 'templates': templates_qs, 'instance': template_instance,
-        'title': f"Edit: {template_instance.name}", 'form_title': f"Edit: {template_instance.name}"
-    })
+    context = {
+        'form': form, 'instance': template_instance, 'templates': templates_qs,
+        'title': f"Edit Template: {template_instance.name}", 'form_title': f"Edit: {template_instance.name}"
+    }
+    return render(request, 'mailer_app/email_template_form.html', context)
 
+@login_required
 def delete_email_template(request, template_id):
     template_obj = get_object_or_404(EmailTemplate, id=template_id)
     if request.method == 'POST':
@@ -232,63 +421,56 @@ def delete_email_template(request, template_id):
     messages.warning(request, "Deletion must be confirmed via POST.")
     return redirect('mailer_app:manage_email_templates')
 
+@login_required
 def preview_email_template_page(request, template_id):
     template_instance = get_object_or_404(EmailTemplate, id=template_id)
-    sample_context = _get_sample_context(contact_list_instance=None)
+    sample_context = _get_sample_context(request, contact_list_instance=None)
     try:
         rendered_subject = _render_email_content(template_instance.subject, sample_context)
     except TemplateSyntaxError as e:
         rendered_subject = f"Error rendering subject: {escape(str(e))}"
         messages.warning(request, f"Subject has a syntax error: {escape(str(e))}")
-        
-    return render(request, 'mailer_app/preview_email.html', { # Assuming preview_email.html is in mailer_app/templates/mailer_app/
+    return render(request, 'mailer_app/preview_email.html', {
         'template': template_instance, 'rendered_subject': rendered_subject,
         'title': f"Preview: {template_instance.name}"
     })
 
-@xframe_options_sameorigin 
+@xframe_options_sameorigin
+@login_required
 def get_rendered_email_content(request, template_id):
     template_instance = get_object_or_404(EmailTemplate, id=template_id)
     contact_list_id = request.GET.get('contact_list_id')
     contact_list_for_sample = None
     if contact_list_id:
-        contact_list_for_sample = ContactList.objects.filter(id=contact_list_id).first()
-    
-    sample_context = _get_sample_context(contact_list_instance=contact_list_for_sample)
-    sample_context.setdefault('unsubscribe_url', '#') 
-    sample_context.setdefault('your_company_name', getattr(settings, 'YOUR_COMPANY_NAME', "Your Company"))
-
+        try:
+            contact_list_for_sample = ContactList.objects.get(id=contact_list_id)
+        except ContactList.DoesNotExist: pass            
+    sample_context = _get_sample_context(request, contact_list_instance=contact_list_for_sample)
     try:
         rendered_html = _render_email_content(template_instance.html_content, sample_context)
-        return HttpResponse(rendered_html)
+        rendered_footer = _render_email_content(template_instance.footer_html, sample_context)
+        full_rendered_html = rendered_html + rendered_footer
+        return HttpResponse(full_rendered_html)
     except TemplateSyntaxError as e:
         logger.error(f"TemplateSyntaxError rendering template {template_id} for preview: {e}", exc_info=True)
-        error_html = f"""
-        <div style="font-family: sans-serif; padding: 20px; border: 2px solid red; background-color: #ffe0e0;">
-            <h3 style="color: red;">Template Rendering Error</h3>
-            <p>There is a syntax error in your email template's HTML content:</p>
-            <pre style="background-color: #f0f0f0; padding: 10px; border-radius: 5px; white-space: pre-wrap; word-wrap: break-word;">{escape(str(e))}</pre>
-            <p>Please check your template for issues like unclosed tags (e.g., <code>{{% if %}}</code> without <code>{{% endif %}}</code>) or incorrect variable names (e.g., <code>{{{{ variable }}}}</code> instead of <code>{{{{ variable }}}}</code>).</p>
-        </div>
-        """
-        return HttpResponse(error_html, status=200) # Return 200 so iframe displays the error, not a browser error page
+        error_html = f"""<div style='font-family: sans-serif; padding: 20px; border: 2px solid red; background-color: #ffe0e0;'>
+            <h3 style='color: red;'>Template Rendering Error</h3> <p>Error in HTML content or footer:</p>
+            <pre style='background-color: #f0f0f0; padding: 10px; border-radius: 5px;'>{escape(str(e))}</pre></div>"""
+        return HttpResponse(error_html, status=200)
     except Exception as e:
         logger.error(f"Unexpected error rendering template {template_id} for preview: {e}", exc_info=True)
-        return HttpResponse(f"<p style='color:red; font-family:sans-serif; padding:20px;'>An unexpected error occurred while rendering the template: {escape(str(e))}</p>", status=200)
+        return HttpResponse(f"<p style='color:red;'>Error: {escape(str(e))}</p>", status=200)
 
-
+# --- Campaigns ---
+@login_required
 def manage_campaigns(request):
     campaigns_qs = Campaign.objects.all().order_by('-created_at')
     if request.method == 'POST':
         form = CampaignForm(request.POST)
         if form.is_valid():
-            campaign = form.save(commit=False)
-            # Status is now part of the form, so it will be in form.cleaned_data
-            # campaign.status = form.cleaned_data.get('status', 'draft') # Default to draft if not in form
-            campaign.save() # Save the main campaign object
-            form.save_m2m() # Save ManyToMany relationships (like contact_lists)
-
-            # Recalculate total_recipients after M2M is saved
+            campaign = form.save(commit=False) 
+            campaign.save() 
+            form.save_m2m() 
             if campaign.contact_lists.exists():
                 campaign.total_recipients = Contact.objects.filter(
                     contact_list__in=campaign.contact_lists.all(),
@@ -296,29 +478,29 @@ def manage_campaigns(request):
                 ).exclude(email__exact='').distinct().count()
             else:
                 campaign.total_recipients = 0
-            # Save again with updated count and potentially status from form
-            campaign.save(update_fields=['total_recipients']) 
-
+            campaign.save(update_fields=['total_recipients'])
             messages.success(request, f"Campaign '{campaign.name}' saved as {campaign.get_status_display()}.")
             return redirect('mailer_app:view_campaign', campaign_id=campaign.id)
-        else: 
-            error_list = []
-            for field, errors in form.errors.items():
-                field_label = form.fields.get(field).label if form.fields.get(field) and hasattr(form.fields.get(field), 'label') else field
-                error_list.append(f"{field_label}: {', '.join(errors)}")
-            error_string = "Could not save campaign. Please correct the errors: " + "; ".join(error_list)
-            messages.error(request, error_string)
-    else: 
+        else:
+            error_list = [f"{(form.fields.get(f).label if form.fields.get(f) else f)}: {', '.join(errs)}" for f, errs in form.errors.items()]
+            messages.error(request, "Could not save campaign: " + "; ".join(error_list))
+    else:
         form = CampaignForm()
     return render(request, 'mailer_app/campaign_form.html', {
         'form': form, 'campaigns': campaigns_qs,
         'title': "Manage Campaigns", 'form_title': "Create/Edit Campaign"
     })
 
+@login_required
 def view_campaign(request, campaign_id):
     campaign_obj = get_object_or_404(Campaign, id=campaign_id)
     test_email_form = SendTestEmailForm(initial={'email_template': campaign_obj.email_template})
-    merge_tags = ["{{email}}", "{{first_name}}", "{{last_name}}", "{{company}}", "{{job_title}}", "{{unsubscribe_url}}", "{{your_company_name}}"]
+    app_settings = AppSettings.load()
+    merge_tags = [
+        "{{email}}", "{{first_name}}", "{{last_name}}", "{{company}}", "{{job_title}}", 
+        "{{unsubscribe_url}}", "{{your_company_name}}", "{{company_address}}", "{{site_url}}",
+        "{{tracking_pixel}}"
+    ]
     first_contact_list = campaign_obj.contact_lists.all().first()
     if first_contact_list:
         sample_contact_with_custom = first_contact_list.contacts.filter(custom_fields__isnull=False).first()
@@ -331,11 +513,16 @@ def view_campaign(request, campaign_id):
     }
     return render(request, 'mailer_app/view_campaign_detail.html', context)
 
+@login_required
 def send_test_email_view(request, campaign_id):
     campaign_obj = get_object_or_404(Campaign, id=campaign_id)
     if not campaign_obj.email_template:
-        messages.error(request, "Campaign has no email template.")
+        messages.error(request, "Campaign has no email template selected.")
         return redirect('mailer_app:view_campaign', campaign_id=campaign_obj.id)
+    settings_obj = AppSettings.load()
+    if not settings_obj or not settings_obj.sender_email:
+        messages.error(request, "Sender email is not configured in settings. Please set it up first.")
+        return redirect('mailer_app:manage_settings')
 
     if request.method == 'POST':
         form = SendTestEmailForm(request.POST)
@@ -343,122 +530,226 @@ def send_test_email_view(request, campaign_id):
             test_email = form.cleaned_data['test_email_address']
             template_to_use = form.cleaned_data['email_template']
             first_contact_list_for_sample = campaign_obj.contact_lists.all().first()
-            sample_context = _get_sample_context(contact_list_instance=first_contact_list_for_sample)
-            sample_context.setdefault('unsubscribe_url', "https://example.com/test-unsubscribe-link") # Placeholder for test
-            sample_context.setdefault('your_company_name', getattr(settings, 'YOUR_COMPANY_NAME', "Your Company"))
+            sample_context = _get_sample_context(request, contact_list_instance=first_contact_list_for_sample)
+            sample_context['email'] = test_email 
             subject = _render_email_content(template_to_use.subject, sample_context)
             html_body = _render_email_content(template_to_use.html_content, sample_context)
+            html_body += _render_email_content(template_to_use.footer_html, sample_context)
             plain_body = strip_tags(html_body)
             try:
                 send_mail(
                     subject=subject, message=plain_body,
-                    from_email=settings.AWS_SES_SENDER_EMAIL, # CORRECTED
+                    from_email=settings_obj.sender_email,
                     recipient_list=[test_email],
                     html_message=html_body, fail_silently=False,
                 )
                 messages.success(request, f"Test email sent to {test_email} using '{template_to_use.name}'.")
             except Exception as e:
-                messages.error(request, f"Error sending test email: {e}")
+                logger.error(f"Error sending test email: {e}", exc_info=True)
+                messages.error(request, f"Error sending test email: {str(e)}")
         else:
-            error_messages = [f"{form.fields.get(f).label if form.fields.get(f) and f != '__all__' else ''}: {e}" for f, errs in form.errors.items() for e in errs]
+            error_messages = [f"{(form.fields.get(f).label if form.fields.get(f) else f)}: {e}" for f, errs in form.errors.items() for e in errs]
             messages.error(request, "Test email not sent. Errors: " + "; ".join(error_messages))
     return redirect('mailer_app:view_campaign', campaign_id=campaign_obj.id)
 
+@login_required
 def execute_send_campaign(request, campaign_id):
     campaign_obj = get_object_or_404(Campaign, id=campaign_id)
-    if campaign_obj.status in ['sending', 'sent', 'queued']:
-        messages.warning(request, f"Campaign '{campaign_obj.name}' is {campaign_obj.status}.")
+    if campaign_obj.status in ['sending', 'sent', 'queued'] and campaign_obj.status != 'failed':
+        messages.warning(request, f"Campaign '{campaign_obj.name}' is already {campaign_obj.get_status_display()} or has been processed.")
         return redirect('mailer_app:view_campaign', campaign_id=campaign_obj.id)
-
     if not campaign_obj.contact_lists.exists() or not campaign_obj.email_template:
-        messages.error(request, "Campaign needs contact list(s) and a template.")
+        messages.error(request, "Campaign needs at least one contact list and an email template before sending.")
         return redirect('mailer_app:view_campaign', campaign_id=campaign_obj.id)
-
-    from marketing_emails.tasks import process_campaign_task # Import your Celery task
-    
+    from marketing_emails.tasks import process_campaign_task 
     campaign_obj.status = 'queued' 
-    campaign_obj.total_recipients = Contact.objects.filter(
-        contact_list__in=campaign_obj.contact_lists.all(),
-        subscribed=True, email__isnull=False
-    ).exclude(email__exact='').distinct().count()
-    campaign_obj.successfully_sent = 0 
-    campaign_obj.failed_to_send = 0   
-    
-    if campaign_obj.total_recipients == 0:
-        messages.warning(request, "No valid subscribed contacts in selected list(s).")
-        campaign_obj.status = 'failed' 
-        campaign_obj.save(update_fields=['status', 'total_recipients', 'successfully_sent', 'failed_to_send'])
-        return redirect('mailer_app:view_campaign', campaign_id=campaign_obj.id)
-
-    campaign_obj.save(update_fields=['status', 'total_recipients', 'successfully_sent', 'failed_to_send'])
-    
+    campaign_obj.save(update_fields=['status'])
     process_campaign_task.delay(campaign_obj.id)
-    
-    messages.success(request, f"Campaign '{campaign_obj.name}' queued for sending.")
+    messages.success(request, f"Campaign '{campaign_obj.name}' has been queued for sending.")
     return redirect('mailer_app:view_campaign', campaign_id=campaign_obj.id)
 
-# --- Unsubscribe View ---
-# This view is now correctly placed here as per your views.py structure.
-# Ensure its URL is defined in mailer_app/urls.py
-
-# from django.urls import reverse # Already imported at top
-# from django.contrib.sites.models import Site # Already imported at top
-
-def unsubscribe_contact_view(request, token): 
-    """
-    Handles unsubscribe requests.
-    Finds the contact by their unique unsubscribe token and updates their status.
-    """
+# --- Unsubscribe & Re-subscribe ---
+def unsubscribe_contact_view(request, token):
     try:
-        # Ensure token is a valid UUID before querying to prevent DB errors on malformed tokens
-        # uuid.UUID(str(token)) # This would raise ValueError if token is not a valid UUID string
-        contact_obj = get_object_or_404(Contact, unsubscribe_token=token)
-    except Http404: # Catch if token not found
-        messages.error(request, "Invalid unsubscribe link. Link may have expired or is incorrect.")
-        return render(request, 'mailer_app/unsubscribe_confirmation.html', {'success': False, 'message': "Invalid unsubscribe link."}) # Adjusted path
-    except ValueError: # Catch if token is not a valid UUID format
-        messages.error(request, "Malformed unsubscribe link.")
-        return render(request, 'mailer_app/unsubscribe_confirmation.html', {'success': False, 'message': "Malformed unsubscribe link."}) # Adjusted path
-
+        valid_token = uuid.UUID(str(token))
+        contact_obj = get_object_or_404(Contact, unsubscribe_token=valid_token)
+    except (Http404, ValueError):
+        messages.error(request, "Invalid or malformed unsubscribe link.")
+        return render(request, 'mailer_app/unsubscribe_confirmation.html', {
+            'success': False, 'message': "Invalid or malformed unsubscribe link."
+        })
     if request.method == 'POST':
-        if contact_obj.subscribed:
-            contact_obj.subscribed = False
-            contact_obj.save(update_fields=['subscribed', 'updated_at'])
-            # REFINED SUCCESS MESSAGE
-            success_message = f"The email address <strong>{contact_obj.email}</strong> has been successfully unsubscribed from our mailing list."
-            messages.success(request, success_message, extra_tags='safe') # Using safe if message contains HTML
-            return render(request, 'mailer_app/unsubscribe_confirmation.html', {
-                'success': True, 
-                'confirmation_message': success_message # Pass the message directly
-            })
-        else:
-            # REFINED ALREADY UNSUBSCRIBED MESSAGE
-            info_message = f"The email address <strong>{contact_obj.email}</strong> is already unsubscribed."
-            messages.info(request, info_message, extra_tags='safe')
-            return render(request, 'mailer_app/unsubscribe_confirmation.html', {
-                'success': None, # Indicates "already done" status
-                'confirmation_message': info_message
-            })
-    '''
-    if request.method == 'POST':
-        if contact_obj.subscribed:
-            contact_obj.subscribed = False
-            contact_obj.save(update_fields=['subscribed', 'updated_at'])
-            messages.success(request, f"You have been successfully unsubscribed from {contact_obj.email}.")
-            return render(request, 'mailer_app/unsubscribe_confirmation.html', {'success': True, 'email': contact_obj.email}) # Adjusted path
-        else:
-            messages.info(request, f"{contact_obj.email} is already unsubscribed.")
-            return render(request, 'mailer_app/unsubscribe_confirmation.html', {'success': None, 'message': "You are already unsubscribed.", 'email': contact_obj.email}) # Adjusted path
-
-    # For GET request, show the confirmation page
-    # Ensure this template path is correct for mailer_app
-    '''
-    return render(request, 'mailer_app/unsubscribe_page.html', {'contact': contact_obj, 'token': token}) # Adjusted path
+        if 'confirm_unsubscribe' in request.POST:
+            if contact_obj.subscribed:
+                contact_obj.subscribed = False
+                contact_obj.save(update_fields=['subscribed', 'updated_at'])
+                success_message = f"The email address <strong>{contact_obj.email}</strong> has been successfully unsubscribed."
+                messages.success(request, success_message, extra_tags='safe')
+                return render(request, 'mailer_app/unsubscribe_confirmation.html', {
+                    'success': True, 'confirmation_message': success_message, 'contact_email': contact_obj.email
+                })
+            else:
+                info_message = f"The email address <strong>{contact_obj.email}</strong> is already unsubscribed."
+                messages.info(request, info_message, extra_tags='safe')
+                return render(request, 'mailer_app/unsubscribe_confirmation.html', {
+                    'success': None, 'confirmation_message': info_message, 'contact_email': contact_obj.email
+                })
+        elif 'keep_subscribed' in request.POST:
+            messages.success(request, f"Thank you for staying subscribed, <strong>{contact_obj.email}</strong>!", extra_tags='safe')
+            return redirect('mailer_app:keep_subscribed_thank_you')
+    return render(request, 'mailer_app/unsubscribe_page.html', {'contact': contact_obj, 'token': token})
 
 def keep_subscribed_thank_you_view(request):
-    """
-    A simple view to thank the user for choosing to stay subscribed.
-    """
-    messages.success(request, "Thank you for staying subscribed! We appreciate having you with us.")
-    # You can also pass specific context if needed for the thank you page
     return render(request, 'mailer_app/keep_subscribed_thank_you.html', {'title': "Subscription Confirmed"})
+
+@login_required 
+def resubscribe_contact_view(request):
+    if request.method == 'POST':
+        email_to_resubscribe = request.POST.get('email')
+        if not email_to_resubscribe:
+            messages.error(request, "Please provide an email address to re-subscribe.")
+        else:
+            contact_to_resubscribe = Contact.objects.filter(email=email_to_resubscribe).first()
+            if contact_to_resubscribe:
+                if not contact_to_resubscribe.subscribed:
+                    contact_to_resubscribe.subscribed = True
+                    contact_to_resubscribe.save(update_fields=['subscribed', 'updated_at'])
+                    messages.success(request, f"The email <strong>{email_to_resubscribe}</strong> has been re-subscribed.", extra_tags='safe')
+                else:
+                    messages.info(request, f"The email <strong>{email_to_resubscribe}</strong> is already subscribed.", extra_tags='safe')
+            else:
+                messages.warning(request, f"The email <strong>{email_to_resubscribe}</strong> was not found in our records.", extra_tags='safe')
+        return redirect(request.POST.get('next', 'mailer_app:dashboard')) 
+    return render(request, 'mailer_app/resubscribe_form.html', {'title': "Re-subscribe"})
+
+# --- Settings ---
+@login_required
+def manage_settings(request):
+    settings_obj, created = AppSettings.objects.get_or_create(pk=1) 
+    if created: 
+        settings_obj.sender_email = django_settings.DEFAULT_FROM_EMAIL if hasattr(django_settings, 'DEFAULT_FROM_EMAIL') else 'noreply@example.com'
+        settings_obj.company_name = "My Awesome Company"
+        settings_obj.save()
+    if request.method == 'POST':
+        form = SettingsForm(request.POST, instance=settings_obj)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Settings updated successfully.")
+            return redirect('mailer_app:manage_settings')
+        else:
+            messages.error(request, "Could not update settings. Please check errors.")
+    else:
+        form = SettingsForm(instance=settings_obj)
+    return render(request, 'mailer_app/settings_form.html', {
+        'form': form, 'title': "Manage Settings"
+    })
+
+# --- Media Assets ---
+@login_required
+def upload_media(request):
+    uploaded_file_url_for_template = None 
+    if request.method == 'POST':
+        form = MediaUploadForm(request.POST, request.FILES)
+        if form.is_valid():
+            media_file = request.FILES['media_file']
+            file_name_part = default_storage.get_valid_name(media_file.name)
+            file_upload_path = os.path.join(
+                'user_media', 
+                default_storage.get_valid_name(request.user.username), 
+                f"{uuid.uuid4()}_{file_name_part}"
+            )
+            actual_file_path_in_storage = default_storage.get_available_name(file_upload_path)
+            saved_path = default_storage.save(actual_file_path_in_storage, media_file)
+            file_s3_url = default_storage.url(saved_path)
+            uploaded_file_url_for_template = file_s3_url
+            try:
+                MediaAsset.objects.create(
+                    uploaded_by=request.user,
+                    file_name=media_file.name, 
+                    file_path_in_storage=saved_path, 
+                    file_url=file_s3_url,
+                    file_type=media_file.content_type,
+                    file_size=media_file.size
+                )
+                messages.success(request, f"File '{media_file.name}' uploaded successfully.")
+            except Exception as e:
+                logger.error(f"Error creating MediaAsset record for {media_file.name} after S3 upload: {e}", exc_info=True)
+                messages.error(request, "File uploaded to S3, but failed to create database record.")
+                if saved_path:
+                    default_storage.delete(saved_path)
+                    logger.info(f"Cleaned up orphaned S3 file {saved_path} after DB error.")
+                uploaded_file_url_for_template = None 
+            return render(request, 'mailer_app/media_upload.html', {
+                'form': MediaUploadForm(), 
+                'uploaded_file_url': uploaded_file_url_for_template, 
+                'title': "Upload Media"
+            })
+        else:
+            messages.error(request, "File upload failed. Please check the form for errors.")
+    else: 
+        form = MediaUploadForm()
+    return render(request, 'mailer_app/media_upload.html', {
+        'form': form,
+        'uploaded_file_url': uploaded_file_url_for_template, 
+        'title': "Upload Media"
+    })
+
+@login_required
+def manage_media_assets(request):
+    media_assets_qs = MediaAsset.objects.all().order_by('-uploaded_at') 
+    paginator = Paginator(media_assets_qs, 15) 
+    page_number = request.GET.get('page')
+    try:
+        assets_page_obj = paginator.page(page_number)
+    except PageNotAnInteger:
+        assets_page_obj = paginator.page(1)
+    except EmptyPage:
+        assets_page_obj = paginator.page(paginator.num_pages)
+    context = {
+        'assets_page_obj': assets_page_obj, 'title': "Manage Media Assets"
+    }
+    return render(request, 'mailer_app/manage_media_assets.html', context)
+
+@login_required
+def delete_media_asset(request, asset_id):
+    asset = get_object_or_404(MediaAsset, id=asset_id)
+    if request.method == 'POST':
+        asset_name = asset.file_name
+        s3_object_key_to_delete = asset.file_path_in_storage
+        try:
+            if s3_object_key_to_delete:
+                default_storage.delete(s3_object_key_to_delete)
+                logger.info(f"Successfully deleted '{s3_object_key_to_delete}' from S3 for asset ID {asset.id}.")
+            else:
+                logger.warning(f"No file_path_in_storage found for asset ID {asset.id}. Cannot delete from storage.")
+            asset.delete() 
+            messages.success(request, f"Media asset '{asset_name}' and its S3 file (if path was known) have been processed for deletion.")
+        except Exception as e:
+            logger.error(f"Error deleting media asset {asset_id} or its S3 file: {e}", exc_info=True)
+            messages.error(request, f"Could not fully delete media asset. Error: {e}")
+        return redirect('mailer_app:manage_media_assets')
+    messages.warning(request, "Deletion must be confirmed via POST.")
+    return redirect('mailer_app:manage_media_assets') 
+
+# --- Analytics, Tracking, Health Check, 500 ---
+@login_required
+def analytics(request):
+    campaigns = Campaign.objects.all().order_by('-created_at')[:20]
+    return render(request, 'mailer_app/analytics.html', {'campaigns': campaigns, 'title': "Campaign Analytics"})
+
+def track_open(request, campaign_id, contact_id):
+    try:
+        log = CampaignSendLog.objects.filter(campaign_id=campaign_id, contact_id=contact_id).first()
+        if log and not log.opened_at: 
+            log.opened_at = timezone.now()
+            log.save(update_fields=['opened_at'])
+    except Exception as e:
+        logger.error(f"Error tracking open for c:{campaign_id}, u:{contact_id}: {e}")
+    pixel = b'\x47\x49\x46\x38\x39\x61\x01\x00\x01\x00\x80\x00\x00\xff\xff\xff\x00\x00\x00\x21\xf9\x04\x01\x00\x00\x00\x00\x2c\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02\x44\x01\x00\x3b'
+    return HttpResponse(pixel, content_type='image/gif')
+
+def custom_500(request):
+    return render(request, 'mailer_app/500.html', status=500)
+
+def health_check(request):
+    return HttpResponse("OK", status=200)

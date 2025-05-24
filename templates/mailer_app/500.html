@@ -1,0 +1,10 @@
+{% extends "mailer_app/base.html" %}
+  {% block title %}Server Error - Bulk Emailer{% endblock %}
+  {% block page_title %}Server Error{% endblock %}
+  {% block content %}
+  <div class="max-w-lg mx-auto card">
+      <h2 class="text-xl font-semibold mb-4 text-red-700">Something Went Wrong</h2>
+      <p class="text-gray-600">We're sorry, but an error occurred. Please try again or contact support.</p>
+      <a href="{% url 'mailer_app:dashboard' %}" class="btn mt-4">Return to Dashboard</a>
+  </div>
+  {% endblock %}

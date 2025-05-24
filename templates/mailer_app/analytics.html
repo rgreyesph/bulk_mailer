@@ -1,0 +1,70 @@
+{% extends "mailer_app/base.html" %}
+
+{% block title %}Campaign Analytics - Bulk Emailer{% endblock %}
+
+{% block page_title %}Campaign Analytics{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2 class="text-xl font-semibold mb-4 text-indigo-700">Campaign Performance Overview</h2>
+    <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Campaign Name
+                    </th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Status
+                    </th>
+                    <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Total Recipients
+                    </th>
+                    <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Successfully Sent
+                    </th>
+                    <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Unique Opens
+                    </th>
+                    <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Failed
+                    </th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Sent At
+                    </th>
+                </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+                {% for campaign in campaigns %}
+                <tr>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        <a href="{% url 'mailer_app:view_campaign' campaign.id %}" class="link">{{ campaign.name }}</a>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm">
+                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full
+                            {% if campaign.status == 'draft' %} bg-yellow-100 text-yellow-800
+                            {% elif campaign.status == 'scheduled' %} bg-blue-100 text-blue-800
+                            {% elif campaign.status == 'queued' %} bg-gray-100 text-gray-800
+                            {% elif campaign.status == 'sending' %} bg-indigo-100 text-indigo-800
+                            {% elif campaign.status == 'sent' %} bg-green-100 text-green-800
+                            {% elif campaign.status == 'failed' %} bg-red-100 text-red-800
+                            {% else %} bg-gray-100 text-gray-800 {% endif %}">
+                            {{ campaign.get_status_display }}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-right">{{ campaign.total_recipients }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-right">{{ campaign.successfully_sent }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-right">{{ campaign.opened_count }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-right">{{ campaign.failed_to_send }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ campaign.sent_at|date:"Y-m-d H:i"|default:"N/A" }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7" class="px-6 py-4 text-center text-sm text-gray-500">No campaigns to analyze yet. Create and send some campaigns first.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
