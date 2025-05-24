@@ -14,11 +14,103 @@
 
 <div class="card">
     {% if assets_page_obj.object_list %}
+    <div class="flex flex-col sm:flex-row justify-between items-center mb-4">
+        <h3 class="text-lg font-medium text-gray-800">
+            Media Assets (Page {{ assets_page_obj.number }} of {{ assets_page_obj.paginator.num_pages }})
+        </h3>
+    </div>
+
+    {# Pagination Controls - TOP #}
+    {% if assets_page_obj.paginator.num_pages > 1 %}
+    <div class="mb-4 flex items-center justify-between border-b border-t border-gray-200 bg-white px-4 py-3 sm:px-0">
+        <div class="flex flex-1 justify-between sm:hidden">
+            {% if assets_page_obj.has_previous %}
+            <a href="?page={{ assets_page_obj.previous_page_number }}{% if current_sort_by %}&sort_by={{ current_sort_by }}{% endif %}{% if current_order %}&order={{ current_order }}{% endif %}"
+               class="relative inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50" data-testid="pagination-previous-mobile-top">Previous</a>
+            {% else %}
+            <span class="relative inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-400 cursor-not-allowed">Previous</span>
+            {% endif %}
+            {% if assets_page_obj.has_next %}
+            <a href="?page={{ assets_page_obj.next_page_number }}{% if current_sort_by %}&sort_by={{ current_sort_by }}{% endif %}{% if current_order %}&order={{ current_order }}{% endif %}"
+               class="relative ml-3 inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50" data-testid="pagination-next-mobile-top">Next</a>
+            {% else %}
+            <span class="relative ml-3 inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-400 cursor-not-allowed">Next</span>
+            {% endif %}
+        </div>
+        <div class="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
+            <div>
+                <p class="text-sm text-gray-700">
+                    Showing <span class="font-medium">{{ assets_page_obj.start_index }}</span>
+                    to <span class="font-medium">{{ assets_page_obj.end_index }}</span>
+                    of <span class="font-medium">{{ assets_page_obj.paginator.count }}</span> results
+                </p>
+            </div>
+            <div>
+                <nav class="isolate inline-flex -space-x-px rounded-md shadow-sm" aria-label="Pagination">
+                    {% if assets_page_obj.has_previous %}
+                    <a href="?page=1{% if current_sort_by %}&sort_by={{ current_sort_by }}{% endif %}{% if current_order %}&order={{ current_order }}{% endif %}"
+                       class="relative inline-flex items-center rounded-l-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0" aria-label="First" data-testid="pagination-first-top">
+                        <span class="sr-only">First</span>«
+                    </a>
+                    <a href="?page={{ assets_page_obj.previous_page_number }}{% if current_sort_by %}&sort_by={{ current_sort_by }}{% endif %}{% if current_order %}&order={{ current_order }}{% endif %}"
+                       class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0" aria-label="Previous" data-testid="pagination-previous-top">
+                        ‹ <span class="sr-only">Previous</span>
+                    </a>
+                    {% else %}
+                    <span class="relative inline-flex items-center rounded-l-md px-2 py-2 text-gray-300 ring-1 ring-inset ring-gray-300 cursor-not-allowed" aria-hidden="true">«</span>
+                    <span class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-400 ring-1 ring-inset ring-gray-300 cursor-not-allowed" aria-hidden="true">‹</span>
+                    {% endif %}
+                    {% for i in assets_page_obj.paginator.page_range %}
+                        {% if assets_page_obj.number == i %}
+                            <span aria-current="page" class="relative z-10 inline-flex items-center bg-indigo-600 px-4 py-2 text-sm font-semibold text-white focus:z-20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600" data-testid="pagination-current-top">{{ i }}</span>
+                        {% elif i > assets_page_obj.number|add:'-3' and i < assets_page_obj.number|add:'3' %}
+                            <a href="?page={{ i }}{% if current_sort_by %}&sort_by={{ current_sort_by }}{% endif %}{% if current_order %}&order={{ current_order }}{% endif %}" class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0" data-testid="pagination-page-{{ i }}-top">{{ i }}</a>
+                        {% elif i == assets_page_obj.paginator.page_range.0 or i == assets_page_obj.paginator.page_range.1 %}
+                            {% if i == assets_page_obj.number|add:'-3' or i == assets_page_obj.number|add:'-4' %}
+                            {% else %}
+                            <span class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-700 ring-1 ring-inset ring-gray-300 focus:outline-offset-0">...</span>
+                            {% endif %}
+                        {% elif i == assets_page_obj.paginator.num_pages or i == assets_page_obj.paginator.num_pages|add:'-1' %}
+                            {% if i == assets_page_obj.number|add:'3' or i == assets_page_obj.number|add:'4' %}
+                            {% else %}
+                            <span class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-700 ring-1 ring-inset ring-gray-300 focus:outline-offset-0">...</span>
+                            {% endif %}
+                        {% endif %}
+                    {% endfor %}
+                    {% if assets_page_obj.has_next %}
+                    <a href="?page={{ assets_page_obj.next_page_number }}{% if current_sort_by %}&sort_by={{ current_sort_by }}{% endif %}{% if current_order %}&order={{ current_order }}{% endif %}"
+                       class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0" aria-label="Next" data-testid="pagination-next-top">
+                        <span class="sr-only">Next</span>›
+                    </a>
+                    <a href="?page={{ assets_page_obj.paginator.num_pages }}{% if current_sort_by %}&sort_by={{ current_sort_by }}{% endif %}{% if current_order %}&order={{ current_order }}{% endif %}"
+                       class="relative inline-flex items-center rounded-r-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0" aria-label="Last" data-testid="pagination-last-top">
+                        <span class="sr-only">Last</span>»
+                    </a>
+                    {% else %}
+                    <span class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-400 ring-1 ring-inset ring-gray-300 cursor-not-allowed" aria-hidden="true">›</span>
+                    <span class="relative inline-flex items-center rounded-r-md px-2 py-2 text-gray-300 ring-1 ring-inset ring-gray-300 cursor-not-allowed" aria-hidden="true">»</span>
+                    {% endif %}
+                </nav>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    {# End Pagination Controls - TOP #}
+
     <div class="overflow-x-auto">
         <table class="min-w-full divide-y divide-gray-200">
             <thead class="bg-gray-50">
                 <tr>
-                    <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Preview / Filename</th>
+                    <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider group">
+                        <a href="?sort_by=file_name&order={% if current_sort_by == 'file_name' and current_order == 'asc' %}desc{% else %}asc{% endif %}{% if request.GET.page %}&page={{ request.GET.page }}{% endif %}" class="inline-flex items-center hover:text-indigo-700">
+                            Preview / Filename
+                            <span class="ml-1 text-gray-400 group-hover:text-indigo-600">
+                                {% if current_sort_by == 'file_name' %}
+                                    {% if current_order == 'asc' %}↑{% else %}↓{% endif %}
+                                {% else %}⇵{% endif %}
+                            </span>
+                        </a>
+                    </th>
                     <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[200px]">URL</th>
                     <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
                     <th scope="col" class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Size</th>
@@ -65,62 +157,83 @@
         </table>
     </div>
 
-    {# Pagination Controls for Media Assets #}
+    {# Pagination Controls - BOTTOM #}
+    {% if assets_page_obj.paginator.num_pages > 1 %}
     <div class="mt-6 flex items-center justify-between border-t border-gray-200 bg-white px-4 py-3 sm:px-6">
         <div class="flex flex-1 justify-between sm:hidden">
             {% if assets_page_obj.has_previous %}
-            <a href="?page={{ assets_page_obj.previous_page_number }}"
-               class="relative inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50" data-testid="pagination-previous-mobile">Previous</a>
+            <a href="?page={{ assets_page_obj.previous_page_number }}{% if current_sort_by %}&sort_by={{ current_sort_by }}{% endif %}{% if current_order %}&order={{ current_order }}{% endif %}"
+               class="relative inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50" data-testid="pagination-previous-mobile-bottom">Previous</a>
+            {% else %}
+            <span class="relative inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-400 cursor-not-allowed">Previous</span>
             {% endif %}
             {% if assets_page_obj.has_next %}
-            <a href="?page={{ assets_page_obj.next_page_number }}"
-               class="relative ml-3 inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50" data-testid="pagination-next-mobile">Next</a>
+            <a href="?page={{ assets_page_obj.next_page_number }}{% if current_sort_by %}&sort_by={{ current_sort_by }}{% endif %}{% if current_order %}&order={{ current_order }}{% endif %}"
+               class="relative ml-3 inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50" data-testid="pagination-next-mobile-bottom">Next</a>
+            {% else %}
+            <span class="relative ml-3 inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-400 cursor-not-allowed">Next</span>
             {% endif %}
         </div>
         <div class="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
             <div>
                 <p class="text-sm text-gray-700">
-                    Showing
-                    <span class="font-medium">{{ assets_page_obj.start_index }}</span>
-                    to
-                    <span class="font-medium">{{ assets_page_obj.end_index }}</span>
-                    of
-                    <span class="font-medium">{{ assets_page_obj.paginator.count }}</span>
-                    results
+                    Showing <span class="font-medium">{{ assets_page_obj.start_index }}</span>
+                    to <span class="font-medium">{{ assets_page_obj.end_index }}</span>
+                    of <span class="font-medium">{{ assets_page_obj.paginator.count }}</span> results
                 </p>
             </div>
             <div>
                 <nav class="isolate inline-flex -space-x-px rounded-md shadow-sm" aria-label="Pagination">
                     {% if assets_page_obj.has_previous %}
-                    <a href="?page=1"
-                       class="relative inline-flex items-center rounded-l-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0" data-testid="pagination-first">
-                        <span class="sr-only">First</span>
-                        «
+                    <a href="?page=1{% if current_sort_by %}&sort_by={{ current_sort_by }}{% endif %}{% if current_order %}&order={{ current_order }}{% endif %}"
+                       class="relative inline-flex items-center rounded-l-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0" aria-label="First" data-testid="pagination-first-bottom">
+                        <span class="sr-only">First</span>«
                     </a>
-                    <a href="?page={{ assets_page_obj.previous_page_number }}"
-                       class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0" data-testid="pagination-previous">
+                    <a href="?page={{ assets_page_obj.previous_page_number }}{% if current_sort_by %}&sort_by={{ current_sort_by }}{% endif %}{% if current_order %}&order={{ current_order }}{% endif %}"
+                       class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0" aria-label="Previous" data-testid="pagination-previous-bottom">
                         ‹ <span class="sr-only">Previous</span>
                     </a>
+                    {% else %}
+                    <span class="relative inline-flex items-center rounded-l-md px-2 py-2 text-gray-300 ring-1 ring-inset ring-gray-300 cursor-not-allowed" aria-hidden="true">«</span>
+                    <span class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-400 ring-1 ring-inset ring-gray-300 cursor-not-allowed" aria-hidden="true">‹</span>
                     {% endif %}
-                    <span aria-current="page"
-                          class="relative z-10 inline-flex items-center bg-indigo-600 px-4 py-2 text-sm font-semibold text-white focus:z-20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600" data-testid="pagination-current">
-                        {{ assets_page_obj.number }}
-                    </span>
+                    {% for i in assets_page_obj.paginator.page_range %}
+                        {% if assets_page_obj.number == i %}
+                            <span aria-current="page" class="relative z-10 inline-flex items-center bg-indigo-600 px-4 py-2 text-sm font-semibold text-white focus:z-20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600" data-testid="pagination-current-bottom">{{ i }}</span>
+                        {% elif i > assets_page_obj.number|add:'-3' and i < assets_page_obj.number|add:'3' %}
+                            <a href="?page={{ i }}{% if current_sort_by %}&sort_by={{ current_sort_by }}{% endif %}{% if current_order %}&order={{ current_order }}{% endif %}" class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0" data-testid="pagination-page-{{ i }}-bottom">{{ i }}</a>
+                        {% elif i == assets_page_obj.paginator.page_range.0 or i == assets_page_obj.paginator.page_range.1 %}
+                            {% if i == assets_page_obj.number|add:'-3' or i == assets_page_obj.number|add:'-4' %}
+                            {% else %}
+                            <span class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-700 ring-1 ring-inset ring-gray-300 focus:outline-offset-0">...</span>
+                            {% endif %}
+                        {% elif i == assets_page_obj.paginator.num_pages or i == assets_page_obj.paginator.num_pages|add:'-1' %}
+                            {% if i == assets_page_obj.number|add:'3' or i == assets_page_obj.number|add:'4' %}
+                            {% else %}
+                            <span class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-700 ring-1 ring-inset ring-gray-300 focus:outline-offset-0">...</span>
+                            {% endif %}
+                        {% endif %}
+                    {% endfor %}
                     {% if assets_page_obj.has_next %}
-                    <a href="?page={{ assets_page_obj.next_page_number }}"
-                       class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0" data-testid="pagination-next">
-                        <span class="sr-only">Next</span> ›
+                    <a href="?page={{ assets_page_obj.next_page_number }}{% if current_sort_by %}&sort_by={{ current_sort_by }}{% endif %}{% if current_order %}&order={{ current_order }}{% endif %}"
+                       class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0" aria-label="Next" data-testid="pagination-next-bottom">
+                        <span class="sr-only">Next</span>›
                     </a>
-                    <a href="?page={{ assets_page_obj.paginator.num_pages }}"
-                       class="relative inline-flex items-center rounded-r-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0" data-testid="pagination-last">
-                        <span class="sr-only">Last</span>
-                        »
+                    <a href="?page={{ assets_page_obj.paginator.num_pages }}{% if current_sort_by %}&sort_by={{ current_sort_by }}{% endif %}{% if current_order %}&order={{ current_order }}{% endif %}"
+                       class="relative inline-flex items-center rounded-r-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0" aria-label="Last" data-testid="pagination-last-bottom">
+                        <span class="sr-only">Last</span>»
                     </a>
+                    {% else %}
+                    <span class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-400 ring-1 ring-inset ring-gray-300 cursor-not-allowed" aria-hidden="true">›</span>
+                    <span class="relative inline-flex items-center rounded-r-md px-2 py-2 text-gray-300 ring-1 ring-inset ring-gray-300 cursor-not-allowed" aria-hidden="true">»</span>
                     {% endif %}
                 </nav>
             </div>
         </div>
     </div>
+    {% endif %}
+    {# End Pagination Controls - BOTTOM #}
+
     {% else %}
     <p class="text-gray-600 p-4">No media assets have been uploaded yet.</p>
     {% endif %}

@@ -696,8 +696,21 @@ def upload_media(request):
 
 @login_required
 def manage_media_assets(request):
-    media_assets_qs = MediaAsset.objects.all().order_by('-uploaded_at') 
-    paginator = Paginator(media_assets_qs, 15) 
+    # Sorting logic
+    sort_by = request.GET.get('sort_by', 'file_name')  # Default to file_name
+    order = request.GET.get('order', 'asc')  # Default to ascending
+    if sort_by != 'file_name':
+        sort_by = 'file_name'  # Restrict to file_name
+        logger.warning(f"Invalid sort_by parameter '{sort_by}', defaulting to 'file_name'.")
+    if order not in ['asc', 'desc']:
+        order = 'asc'
+        logger.warning(f"Invalid order parameter '{order}', defaulting to 'asc'.")
+    
+    order_prefix = '' if order == 'asc' else '-'
+    media_assets_qs = MediaAsset.objects.all().order_by(f"{order_prefix}{sort_by}")
+    
+    # Pagination
+    paginator = Paginator(media_assets_qs, 15)
     page_number = request.GET.get('page')
     try:
         assets_page_obj = paginator.page(page_number)
@@ -705,8 +718,12 @@ def manage_media_assets(request):
         assets_page_obj = paginator.page(1)
     except EmptyPage:
         assets_page_obj = paginator.page(paginator.num_pages)
+    
     context = {
-        'assets_page_obj': assets_page_obj, 'title': "Manage Media Assets"
+        'assets_page_obj': assets_page_obj,
+        'title': "Manage Media Assets",
+        'current_sort_by': sort_by,
+        'current_order': order
     }
     return render(request, 'mailer_app/manage_media_assets.html', context)
 
