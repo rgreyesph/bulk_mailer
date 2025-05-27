@@ -7,84 +7,92 @@ from django.urls import reverse
 from django.contrib.sites.models import Site
 from django.db.models import F
 from django.db import transaction # Import transaction
+from django.utils.html import strip_tags
 import logging
 
 from mailer_app.models import Contact, Campaign, EmailTemplate, CampaignSendLog, Settings as AppSettings
+from bs4 import BeautifulSoup
+from django.urls import NoReverseMatch # For more specific exception handling
+
 
 logger = logging.getLogger(__name__)
 
+# START MARKER FOR send_single_email_task IN tasks.py (REPLACE THE ENTIRE FUNCTION)
 @shared_task(bind=True, max_retries=3, default_retry_delay=5 * 60, rate_limit='10/s')
 def send_single_email_task(self, contact_id, campaign_id):
-    """
-    Sends a single personalized email to a contact for a given campaign.
-    Uses django-ses backend via django.core.mail.send_mail.
-    Also checks for campaign completion to update parent campaign status.
-    """
     processed_successfully = False
-    try:
-        # Use select_for_update to lock the contact and campaign rows if necessary,
-        # though for this task, primary concern is campaign counters.
-        contact = Contact.objects.get(id=contact_id)
-        # Campaign object will be fetched and locked later before updating counters
-        
-        app_settings_obj = AppSettings.load()
-        if not app_settings_obj or not app_settings_obj.sender_email:
-            logger.error(f"Sender email not configured in AppSettings for campaign {campaign_id}. Skipping contact {contact_id}.")
-            # Atomically update campaign failure count
-            Campaign.objects.filter(pk=campaign_id).update(failed_to_send=F('failed_to_send') + 1)
-            check_campaign_completion(campaign_id) # Check completion status
-            return f"Error: Sender email not configured."
+    log_status = 'failed'  # Default log status for CampaignSendLog
+    log_error_message = None # Default error message for CampaignSendLog
+    contact = None # Initialize to ensure it's defined for the finally block
+    campaign = None # Initialize for the finally block
 
-        # Fetch campaign here to use its details
+    try:
+        contact = Contact.objects.get(id=contact_id)
         campaign = Campaign.objects.get(id=campaign_id)
         email_template = campaign.email_template
+        app_settings_obj = AppSettings.load()
+
+        if not app_settings_obj or not app_settings_obj.sender_email:
+            log_error_message = "Error: Sender email not configured in AppSettings."
+            logger.error(f"{log_error_message} Campaign: {campaign_id}, Contact: {contact_id}.")
+            if campaign: # Check if campaign object was fetched
+                 Campaign.objects.filter(pk=campaign.id).update(failed_to_send=F('failed_to_send') + 1)
+            raise ValueError(log_error_message)
+
+        if not email_template:
+            log_error_message = f"Error: Campaign '{campaign.name}' (ID: {campaign.id}) has no email template."
+            logger.error(f"{log_error_message} Contact: {contact_id}.")
+            Campaign.objects.filter(pk=campaign.id).update(failed_to_send=F('failed_to_send') + 1)
+            raise ValueError(log_error_message)
 
         if not contact.subscribed:
             logger.info(f"Contact {contact.email} (ID: {contact.id}) is unsubscribed. Skipping for campaign {campaign.id}.")
-            CampaignSendLog.objects.get_or_create(
-                campaign_id=campaign_id, contact=contact, email_address=contact.email,
-                status='failed', defaults={'error_message': "Contact unsubscribed."}
-            )
-            # This is a skip, not a send failure, so don't increment failed_to_send.
-            # However, it does count as "processed" for completion check.
-            # To handle this, we might need a different way to track "processed" vs "attempted send"
-            # For now, let's assume skips do not count towards failed_to_send but are "done".
-            check_campaign_completion(campaign_id, is_skip=True)
+            log_status = 'skipped'
+            log_error_message = "Contact unsubscribed."
+            # The finally block will handle logging this skipped attempt.
             return f"Skipped: Contact {contact.email} unsubscribed."
 
-        if not email_template:
-            logger.error(f"No template for campaign '{campaign.name}' (ID: {campaign.id}). Skipping contact {contact.id}.")
-            CampaignSendLog.objects.get_or_create(
-                campaign_id=campaign_id, contact=contact, email_address=contact.email,
-                status='failed', defaults={'error_message': "No email template selected for campaign."}
-            )
-            Campaign.objects.filter(pk=campaign.pk).update(failed_to_send=F('failed_to_send') + 1)
-            check_campaign_completion(campaign_id)
-            return f"Error: Campaign '{campaign.name}' has no template."
-
+        # --- Context Preparation ---
         unsubscribe_url = '#'
-        tracking_pixel_url_for_img_tag = '#'
-        current_site_domain = "example.com" # Fallback
+        tracking_pixel_url_for_img_tag = ''
+        base_url_for_links = "http://misconfigured-domain.com"
 
         try:
-            current_site = Site.objects.get_current()
-            current_site_domain = current_site.domain
-            protocol = 'https' if not django_settings.DEBUG else 'http'
+            if app_settings_obj.site_url and app_settings_obj.site_url.startswith(('http://', 'https://')):
+                base_url_for_links = app_settings_obj.site_url.rstrip('/')
+            else:
+                current_site = Site.objects.get_current()
+                domain = current_site.domain
+                protocol = 'https' if not django_settings.DEBUG else 'http'
+                base_url_for_links = f"{protocol}://{domain}"
+            logger.info(f"Base URL for links: {base_url_for_links} (Contact: {contact_id}, Campaign: {campaign_id})")
 
             if contact.unsubscribe_token:
-                path = reverse('mailer_app:unsubscribe_contact', kwargs={'token': str(contact.unsubscribe_token)})
-                unsubscribe_url = f"{protocol}://{current_site_domain}{path}"
-            
-            tracking_pixel_base_url = getattr(django_settings, 'SITE_DOMAIN', current_site_domain)
-            if not tracking_pixel_base_url.startswith(('http://', 'https://')):
-                tracking_pixel_base_url = f"{protocol}://{tracking_pixel_base_url}"
-            
-            tracking_pixel_path = reverse('mailer_app:track_open', kwargs={'campaign_id': campaign.id, 'contact_id': contact.id})
-            raw_tracking_pixel_url = f"{tracking_pixel_base_url.rstrip('/')}{tracking_pixel_path}"
-            tracking_pixel_url_for_img_tag = f'<img src="{raw_tracking_pixel_url}" width="1" height="1" alt="" style="display:none;border:0;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;"/>'
+                try:
+                    path = reverse('mailer_app:unsubscribe_contact', kwargs={'token': str(contact.unsubscribe_token)})
+                    unsubscribe_url = f"{base_url_for_links}{path}"
+                    logger.info(f"Generated unsubscribe URL for {contact.email}: {unsubscribe_url}")
+                except NoReverseMatch as e:
+                    logger.error(f"NoReverseMatch for 'unsubscribe_contact' (Contact: {contact.id}, Token: {contact.unsubscribe_token}). Error: {e}", exc_info=True)
+                    unsubscribe_url = f"{base_url_for_links}/unsubscribe-error-no-reverse/{contact.unsubscribe_token}/"
+            else:
+                logger.warning(f"Contact {contact.email} (ID: {contact.id}) has no unsubscribe_token. Unsubscribe URL will be non-functional.")
+                unsubscribe_url = f"{base_url_for_links}/no-token-unsubscribe/{contact.id}/"
 
+            try:
+                tracking_pixel_path = reverse('mailer_app:track_open', kwargs={'campaign_id': campaign.id, 'contact_id': contact.id})
+                raw_tracking_pixel_url = f"{base_url_for_links}{tracking_pixel_path}"
+                tracking_pixel_url_for_img_tag = f'<img src="{raw_tracking_pixel_url}" width="1" height="1" alt="" style="display:none;border:0;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;"/>'
+                logger.info(f"Generated tracking pixel for {contact.email}: {tracking_pixel_url_for_img_tag}")
+            except NoReverseMatch as e:
+                logger.error(f"NoReverseMatch for 'track_open' (Contact: {contact.id}, Campaign: {campaign.id}). Error: {e}", exc_info=True)
+
+        except Site.DoesNotExist:
+            logger.error(f"Django Site matching query does not exist (Campaign: {campaign_id}). Configure SITE_ID and django_site table.", exc_info=True)
+            unsubscribe_url = f"{base_url_for_links}/site-config-error/unsubscribe/{contact.unsubscribe_token if contact.unsubscribe_token else 'no-token'}/"
         except Exception as e:
-            logger.error(f"Could not generate unsubscribe/tracking URL for contact {contact.id}, campaign {campaign.id}: {e}", exc_info=True)
+            logger.error(f"General error generating URLs (Contact: {contact.id}, Campaign: {campaign.id}): {e}", exc_info=True)
+            unsubscribe_url = f"{base_url_for_links}/url-gen-error/unsubscribe/{contact.unsubscribe_token if contact.unsubscribe_token else 'no-token'}/"
 
         context_data = {
             'first_name': contact.first_name or '',
@@ -96,7 +104,7 @@ def send_single_email_task(self, contact_id, campaign_id):
             'tracking_pixel': tracking_pixel_url_for_img_tag,
             'your_company_name': app_settings_obj.company_name or "Your Company",
             'company_address': app_settings_obj.company_address or "",
-            'site_url': app_settings_obj.site_url or "",
+            'site_url': app_settings_obj.site_url or base_url_for_links,
         }
         if isinstance(contact.custom_fields, dict):
             context_data.update(contact.custom_fields)
@@ -107,92 +115,127 @@ def send_single_email_task(self, contact_id, campaign_id):
             subject_template = Template(email_template.subject)
             personalized_subject = subject_template.render(django_template_context)
         except TemplateSyntaxError as e:
-            logger.error(f"Template syntax error in subject for template '{email_template.name}', campaign {campaign.id}: {e}")
-            personalized_subject = email_template.subject 
+            logger.warning(f"Template syntax error in subject for template '{email_template.name}' (Campaign: {campaign.id}). Using raw subject. Error: {e}")
+            personalized_subject = email_template.subject
 
         try:
             html_body_template = Template(email_template.html_content)
-            personalized_html_body = html_body_template.render(django_template_context)
-            
-            footer_template = Template(email_template.footer_html)
-            personalized_footer = footer_template.render(django_template_context)
-            
-            full_html_content = personalized_html_body + personalized_footer
-        except TemplateSyntaxError as e:
-            logger.error(f"Template syntax error in HTML body/footer for template '{email_template.name}', campaign {campaign.id}: {e}")
-            CampaignSendLog.objects.get_or_create(
-                campaign_id=campaign_id, contact=contact, email_address=contact.email,
-                status='failed', defaults={'error_message': f"Template syntax error: {e}"}
-            )
-            Campaign.objects.filter(pk=campaign_id).update(failed_to_send=F('failed_to_send') + 1)
-            check_campaign_completion(campaign_id)
-            return f"Error: Template syntax error in '{email_template.name}' for contact {contact.email}."
+            personalized_html_body_full_doc = html_body_template.render(django_template_context)
 
-        try:
-            send_mail(
-                subject=personalized_subject,
-                message="", 
-                from_email=app_settings_obj.sender_email,
-                recipient_list=[contact.email],
-                html_message=full_html_content,
-                fail_silently=False
-            )
-            processed_successfully = True
-            logger.info(f"Email sent to {contact.email} for campaign {campaign.id} via django-ses.")
-            CampaignSendLog.objects.get_or_create(
-                campaign_id=campaign_id, contact=contact, email_address=contact.email,
-                status='success', defaults={'message_id': 'N/A_django-ses'}
-            )
-            Campaign.objects.filter(pk=campaign_id).update(successfully_sent=F('successfully_sent') + 1)
-            return f"Email sent to {contact.email}."
-        except Exception as e:
-            error_message_text = str(e)
-            logger.error(f"Django-ses send_mail error for {contact.email}, campaign {campaign.id}: {error_message_text}", exc_info=True)
-            CampaignSendLog.objects.get_or_create(
-                campaign_id=campaign_id, contact=contact, email_address=contact.email,
-                status='failed', defaults={'error_message': error_message_text[:255]}
-            )
-            Campaign.objects.filter(pk=campaign_id).update(failed_to_send=F('failed_to_send') + 1)
-            return f"Error: Email sending failed for {contact.email}."
+            footer_template = Template(email_template.footer_html)
+            personalized_footer_content = footer_template.render(django_template_context)
+
+            soup = BeautifulSoup(personalized_html_body_full_doc, 'html.parser')
+
+            footer_div_str = f'<div style="text-align: center; padding-top: 20px; font-size: 12px; color: #777; clear:both; width:100%;">{personalized_footer_content}</div>'
+            footer_soup_element = BeautifulSoup(footer_div_str, 'html.parser')
+
+            tracking_pixel_html_str = context_data['tracking_pixel']
+            tracking_pixel_soup_element = BeautifulSoup(tracking_pixel_html_str, 'html.parser')
+
+            target_body = soup.body
+            if not target_body:
+                logger.warning(f"No <body> tag found in HTML content for template {email_template.name}. Creating one.")
+                original_content_str = str(soup)
+                soup = BeautifulSoup(f"<body>{original_content_str}</body>", "html.parser")
+                target_body = soup.body
+
+            if footer_soup_element.contents:
+                for child_node in list(footer_soup_element.contents):
+                    target_body.append(child_node.extract())
+
+            if tracking_pixel_html_str and "<!--" not in tracking_pixel_html_str and tracking_pixel_soup_element.contents:
+                for child_node in list(tracking_pixel_soup_element.contents):
+                    target_body.append(child_node.extract())
+
+            full_html_content = str(soup)
+            logger.info(f"Final HTML structure for {contact.email} (Campaign: {campaign.id}) prepared successfully.")
+
+        except TemplateSyntaxError as e:
+            log_error_message = f"Template syntax error in HTML body/footer: {str(e)}"
+            logger.error(f"{log_error_message} (Template: '{email_template.name}', Campaign: {campaign.id}, Contact: {contact.id})", exc_info=True)
+            Campaign.objects.filter(pk=campaign.id).update(failed_to_send=F('failed_to_send') + 1)
+            raise
+
+        send_mail(
+            subject=personalized_subject,
+            message=strip_tags(full_html_content),
+            from_email=app_settings_obj.sender_email,
+            recipient_list=[contact.email],
+            html_message=full_html_content,
+            fail_silently=False
+        )
+        processed_successfully = True
+        log_status = 'success'
+        logger.info(f"Email successfully sent to {contact.email} for campaign {campaign.id}.")
+        Campaign.objects.filter(pk=campaign.id).update(successfully_sent=F('successfully_sent') + 1)
+        return f"Email sent to {contact.email}."
 
     except Contact.DoesNotExist:
-        logger.error(f"Contact ID {contact_id} not found for campaign {campaign_id}.")
-        check_campaign_completion(campaign_id, is_skip_or_contact_error=True) # Count as processed for completion
-        return f"Error: Contact ID {contact_id} not found."
+        logger.error(f"Contact ID {contact_id} does not exist. (Campaign: {campaign_id if campaign else 'unknown'})")
+        log_error_message = f"Contact ID {contact_id} not found."
+        # Log will be created in 'finally'. No campaign counter update.
+        return log_error_message
     except Campaign.DoesNotExist:
-        logger.error(f"Campaign ID {campaign_id} not found when processing contact {contact_id}.")
-        # Cannot update a campaign that doesn't exist
+        logger.error(f"Campaign ID {campaign_id} does not exist. (Contact: {contact_id if contact else 'unknown'})")
+        # Cannot update a campaign that doesn't exist. Log will be created in 'finally'.
         return f"Error: Campaign ID {campaign_id} not found."
-    except AppSettings.DoesNotExist:
-        logger.error(f"Application settings not found. Cannot process email for contact {contact_id}, campaign {campaign_id}.")
-        Campaign.objects.filter(pk=campaign_id).update(failed_to_send=F('failed_to_send') + 1) # Assume campaign exists
-        check_campaign_completion(campaign_id)
-        return f"Error: Application settings not found."
     except Exception as e:
-        logger.exception(f"Unexpected error in send_single_email_task for contact {contact_id}, campaign {campaign_id}: {e}")
-        try:
-            campaign_obj = Campaign.objects.filter(id=campaign_id).first()
-            if campaign_obj:
-                contact_obj = Contact.objects.filter(id=contact_id).first()
-                email_to_log = contact_obj.email if contact_obj else f"Unknown (Contact ID {contact_id})"
-                CampaignSendLog.objects.get_or_create(
-                    campaign=campaign_obj, contact=contact_obj, email_address=email_to_log,
-                    status='failed', defaults={'error_message': f"Unexpected task error: {str(e)[:250]}"}
-                )
-                Campaign.objects.filter(pk=campaign_id).update(failed_to_send=F('failed_to_send') + 1)
-        except Exception as log_e:
-            logger.error(f"Error during fallback logging for send_single_email_task: {log_e}")
-        return f"Failed permanently for contact {contact_id}, campaign {campaign_id} due to unexpected error."
+        log_error_message = log_error_message or f"Unexpected task error: {str(e)[:250]}"
+        logger.exception(f"{log_error_message} (Contact: {contact_id if contact else 'unknown'}, Campaign: {campaign_id if campaign else 'unknown'})")
+        if campaign:
+            Campaign.objects.filter(pk=campaign.id).update(failed_to_send=F('failed_to_send') + 1)
+        # Consider Celery retry logic here if appropriate:
+        # if self.request.retries < self.max_retries: self.retry(exc=e)
+        return f"Failed for contact {contact_id}, campaign {campaign_id} due to: {log_error_message}"
     finally:
-        # This block executes whether an exception occurred or not (unless return was hit earlier)
-        # Check for campaign completion after every task attempt (success, failure, or handled error)
-        # The 'is_skip' logic needs refinement if skips shouldn't count towards total_recipients for completion.
-        # For now, any task finishing means one step closer to checking total_recipients.
-        if 'campaign_id' in locals() and campaign_id is not None:
-             # If the task returned early due to an error before campaign_id was set, this won't run.
-             # This is why check_campaign_completion is also called in some error blocks.
-            check_campaign_completion(campaign_id)
+        # Ensure a log entry is made for every attempt that reaches this stage.
+        # This includes successful sends, failures, and explicitly handled skips that return.
+        final_contact_email = "unknown_email"
+        final_contact_id_for_log = None
+        final_campaign_id_for_log = None
 
+        if contact: # If contact object was successfully fetched
+            final_contact_email = contact.email
+            final_contact_id_for_log = contact.id
+        elif contact_id: # If contact object fetch failed, but we have the ID
+            final_contact_id_for_log = contact_id
+            try: # Attempt to get email if only ID is available
+                c = Contact.objects.get(id=contact_id)
+                final_contact_email = c.email
+            except Contact.DoesNotExist:
+                logger.warning(f"Could not fetch email for contact ID {contact_id} during final logging.")
+
+
+        if campaign: # If campaign object was successfully fetched
+            final_campaign_id_for_log = campaign.id
+        elif campaign_id: # If campaign object fetch failed, but we have the ID
+            final_campaign_id_for_log = campaign_id
+
+
+        if final_contact_id_for_log and final_campaign_id_for_log:
+            log_defaults = {
+                'status': log_status,
+                'message_id': 'N/A_django-ses' if processed_successfully else None,
+                'error_message': log_error_message
+            }
+            # Use update_or_create to handle retries that might have already created a log
+            log_entry, created = CampaignSendLog.objects.update_or_create(
+                campaign_id=final_campaign_id_for_log,
+                contact_id=final_contact_id_for_log, # Use ID here for safety if contact object is None
+                email_address=final_contact_email, # Log the email address
+                defaults=log_defaults
+            )
+            if not created: # If the log entry was updated
+                logger.info(f"Updated existing CampaignSendLog for Contact: {final_contact_id_for_log}, Campaign: {final_campaign_id_for_log}, Status: {log_status}")
+            else:
+                logger.info(f"Created new CampaignSendLog for Contact: {final_contact_id_for_log}, Campaign: {final_campaign_id_for_log}, Status: {log_status}")
+        else:
+            logger.error(f"Could not create CampaignSendLog: Contact ID or Campaign ID missing. ContactID: {final_contact_id_for_log}, CampaignID: {final_campaign_id_for_log}, Status: {log_status}, Error: {log_error_message}")
+
+        if campaign_id is not None:
+             check_campaign_completion(campaign_id)
+# END MARKER FOR send_single_email_task IN tasks.py (REPLACE THE ENTIRE FUNCTION)
 
 def check_campaign_completion(campaign_id, is_skip=False, is_skip_or_contact_error=False):
     """
@@ -304,66 +347,71 @@ def check_campaign_completion(campaign_id, is_skip=False, is_skip_or_contact_err
 @shared_task
 def process_campaign_task(campaign_id):
     """
-    Processes a campaign by queuing individual email sending tasks for each subscribed contact.
+    Processes a campaign by queuing email tasks for subscribed contacts,
+    applying segment filters including contact lists.
     """
     try:
         campaign = Campaign.objects.get(id=campaign_id)
         if campaign.status not in ['draft', 'scheduled', 'queued', 'retrying', 'failed', 'sending']:
             logger.info(f"Campaign '{campaign.name}' (ID: {campaign_id}) is in status '{campaign.status}', not processing.")
-            return f"Campaign '{campaign.name}' not in a sendable/re-sendable state (status: {campaign.status})."
+            return f"Campaign '{campaign.name}' not in a sendable state (status: {campaign.status})."
 
-        # Reset counters and set status to 'sending'
         Campaign.objects.filter(pk=campaign.pk).update(
             status='sending',
             successfully_sent=0,
             failed_to_send=0,
-            sent_at=None 
+            sent_at=None
         )
-        campaign.refresh_from_db() 
+        campaign.refresh_from_db()
 
-        contacts_to_send_qs = Contact.objects.filter(
-            contact_list__in=campaign.contact_lists.all(),
-            subscribed=True,
-            email__isnull=False
-        ).exclude(email__exact='').distinct()
+        contacts_to_send_qs = Contact.objects.filter(subscribed=True, email__isnull=False).exclude(email__exact='')
         
+        if campaign.contact_lists.exists():
+            contacts_to_send_qs = contacts_to_send_qs.filter(contact_list__in=campaign.contact_lists.all())
+        
+        if campaign.segments.exists():
+            segment_filters = []
+            for segment in campaign.segments.all():
+                filters = segment.filters
+                segment_qs = Contact.objects.all()
+                if filters.get('subscribed'):
+                    subscribed = filters['subscribed'] == 'true'
+                    segment_qs = segment_qs.filter(subscribed=subscribed)
+                if filters.get('company'):
+                    segment_qs = segment_qs.filter(company__icontains=filters['company'])
+                if filters.get('custom_fields'):
+                    for key, value in filters['custom_fields'].items():
+                        segment_qs = segment_qs.filter(custom_fields__has_key=key, custom_fields__contains={key: value})
+                if filters.get('contact_lists'):
+                    segment_qs = segment_qs.filter(contact_list__id__in=filters['contact_lists'])
+                segment_filters.append(segment_qs.values('id'))
+            if segment_filters:
+                combined_ids = set()
+                for qs in segment_filters:
+                    combined_ids.update(qs.values_list('id', flat=True))
+                contacts_to_send_qs = contacts_to_send_qs.filter(id__in=combined_ids)
+
+        contacts_to_send_qs = contacts_to_send_qs.distinct()
+
         current_total_recipients = contacts_to_send_qs.count()
-        
-        Campaign.objects.filter(pk=campaign.pk).update(total_recipients=current_total_recipients)
-        # campaign.refresh_from_db() # Not strictly needed here if only total_recipients updated
 
+        Campaign.objects.filter(pk=campaign.pk).update(total_recipients=current_total_recipients)
+        
         if current_total_recipients == 0:
-            logger.info(f"No valid, subscribed contacts for campaign '{campaign.name}'. Marking as failed.")
+            logger.info(f"No valid contacts for campaign '{campaign.name}'. Marking as failed.")
             Campaign.objects.filter(pk=campaign.pk).update(status='failed', sent_at=timezone.now())
             return f"No valid contacts for campaign '{campaign.name}'."
 
-        if not campaign.contact_lists.exists(): # Should be caught by current_total_recipients == 0
-            logger.warning(f"Campaign '{campaign.name}' has no contact lists assigned.")
-            Campaign.objects.filter(pk=campaign.pk).update(status='failed', sent_at=timezone.now())
-            return f"Campaign '{campaign.name}' has no contact lists."
-        
         recipients_queued_count = 0
-        for contact in contacts_to_send_qs: # Iterate over the queryset
+        for contact in contacts_to_send_qs:
             send_single_email_task.delay(contact.id, campaign.id)
             recipients_queued_count += 1
-        
+
         logger.info(f"Queued {recipients_queued_count} emails for campaign '{campaign.name}'. Total recipients: {current_total_recipients}.")
-        
-        # If no tasks were queued (e.g., all contacts filtered out for some reason after initial count),
-        # but total_recipients was > 0, the check_campaign_completion logic might not fire correctly.
-        # So, if recipients_queued_count is 0 but current_total_recipients was > 0, it's an issue.
-        # However, current_total_recipients is the count of contacts_to_send_qs, so this should be fine.
-        # If recipients_queued_count is 0, it means current_total_recipients was also 0, handled above.
-
-        # If tasks were queued, the last send_single_email_task will call check_campaign_completion.
-        # If current_total_recipients > 0 but recipients_queued_count is somehow 0 (should not happen with current logic),
-        # we might need an explicit call to check_campaign_completion here too.
-        # For now, rely on the finally block of send_single_email_task.
-
         return f"Successfully queued {recipients_queued_count} emails for campaign '{campaign.name}'."
 
     except Campaign.DoesNotExist:
-        logger.error(f"Campaign ID {campaign_id} not found for processing.")
+        logger.error(f"Campaign ID {campaign_id} not found.")
         return f"Error: Campaign ID {campaign_id} not found."
     except Exception as e:
         logger.exception(f"Error processing campaign ID {campaign_id}: {e}")
@@ -371,7 +419,7 @@ def process_campaign_task(campaign_id):
             Campaign.objects.filter(pk=campaign_id).update(status='failed')
         except Campaign.DoesNotExist:
             pass
-        raise 
+        raise
 
 @shared_task
 def check_scheduled_campaigns_task():

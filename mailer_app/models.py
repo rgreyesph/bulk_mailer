@@ -93,6 +93,9 @@ class Campaign(models.Model):
     contact_lists = models.ManyToManyField(
         ContactList, blank=True, related_name="campaigns", help_text="Select one or more contact lists."
     )
+    segments = models.ManyToManyField(
+        'Segment', blank=True, related_name="campaigns", help_text="Select one or more segments."
+    )
     email_template = models.ForeignKey(EmailTemplate, on_delete=models.SET_NULL, null=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft', db_index=True)
     scheduled_at = models.DateTimeField(null=True, blank=True, help_text="Send time, if scheduled.")
@@ -203,3 +206,21 @@ class MediaAsset(models.Model):
         ordering = ['-uploaded_at']
         verbose_name = "Media Asset"
         verbose_name_plural = "Media Assets"
+
+class Segment(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=255, unique=True, help_text="e.g., 'Active Subscribers'")
+    filters = models.JSONField(
+        default=dict,
+        help_text="Filter criteria, e.g., {'subscribed': true, 'company': 'Example Inc.', 'custom_fields': {'department': 'Sales'}, 'contact_lists': ['uuid1', 'uuid2']}"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = "Segment"
+        verbose_name_plural = "Segments"

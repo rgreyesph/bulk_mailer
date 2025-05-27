@@ -8,8 +8,8 @@
 <div class="max-w-lg mx-auto">
     <div class="card text-center"> {% if messages %}
             {% for message in messages %}
-                 <div class="alert {% if message.tags == 'success' %}alert-success{% elif message.tags == 'error' %}alert-danger{% elif message.tags == 'warning' %}alert-warning{% else %}alert-info{% endif %}" role="alert">
-                    <p class="font-medium">{{ message.tags|title }}: <span class="font-normal">{{ message }}</span></p>
+                <div class="alert {% if message.tags == 'success' %}alert-success{% elif message.tags == 'error' %}alert-danger{% elif message.tags == 'warning' %}alert-warning{% else %}alert-info{% endif %}" role="alert">
+                    <p class="font-medium">{{ message.tags|title }}: <span class="font-normal">{{ message|safe }}</span></p>
                 </div>
             {% endfor %}
         {% endif %}
@@ -21,9 +21,7 @@
         <p class="text-gray-600 text-sm mb-4">
             You will continue to receive our latest updates, news, and offers.
         </p>
-        <a href="{% url 'mailer_app:dashboard' %}" class="btn">
-            Return to Dashboard
-        </a>
+        <a href="{{ site_home_url|default:'/' }}" class="btn">Visit Our Website</a>
     </div>
 </div>
 {% endblock %}

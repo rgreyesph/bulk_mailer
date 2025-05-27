@@ -6,30 +6,61 @@
 
 {% block content %}
 <div class="max-w-lg mx-auto">
-    <div class="card"> {% if success %}
-            <div class="alert alert-success"> <h5 class="font-semibold text-lg">Successfully Unsubscribed!</h5>
+    <div class="card p-6 md:p-8"> {# Added some padding to the card itself #}
+
+        {% if success %}
+            {# Success Case: Successfully Unsubscribed #}
+            <div class="alert alert-success flex flex-col space-y-2"> {# Added flex flex-col and space-y for vertical stacking and spacing #}
+                <h5 class="font-semibold text-lg">Successfully Unsubscribed!</h5>
+                {# confirmation_message contains HTML (<strong>), so autoescape off or |safe is correct #}
                 <p class="mb-0">{% autoescape off %}{{ confirmation_message }}{% endautoescape %}</p>
-                <p class="text-sm mb-0 mt-2">We're sorry to see you go. You can re-subscribe at any time through our website.</p>
+                <p class="text-sm mt-1">We're sorry to see you go. You can re-subscribe at any time through our website.</p>
             </div>
-        {% elif success is None %} 
-            <div class="alert alert-info">
+
+        {% elif success is None %}
+            {# Already Unsubscribed Case #}
+            <div class="alert alert-info flex flex-col space-y-2"> {# Added flex flex-col and space-y #}
                 <h5 class="font-semibold text-lg">Already Unsubscribed</h5>
                 <p class="mb-0">{% autoescape off %}{{ confirmation_message }}{% endautoescape %}</p>
-                <p class="text-sm mb-0 mt-2">No further action is needed.</p>
+                <p class="text-sm mt-1">No further action is needed.</p>
             </div>
-        {% else %} <div class="alert alert-danger">
-                 <h5 class="font-semibold text-lg">Unsubscribe Failed</h5>
-                <p class="mb-0">{{ message | default:"An error occurred. Could not process your unsubscribe request. Please try again or contact support." }}</p>
+
+        {% else %}
+            {# Error/Failure Case (e.g., invalid link from the try-except block in the view) #}
+            <div class="alert alert-danger flex flex-col space-y-2"> {# Added flex flex-col and space-y #}
+                <h5 class="font-semibold text-lg">Unsubscribe Failed</h5>
+                {# The 'message' variable here is from the view's context for errors. Using |safe in case it ever contains HTML, though usually a plain string. #}
+                <p class="mb-0">{{ message|safe|default:"An error occurred. Could not process your unsubscribe request. Please try again or contact support." }}</p>
             </div>
         {% endif %}
-        <hr class="my-4">
+
+        {# Django Messages Framework - if you have messages set before a redirect to this page OR before a direct render #}
+        {# This is useful if messages are added in the POST part of unsubscribe_contact_view and then this template is rendered #}
+        {% if messages %}
+            <div class="mt-4 space-y-2"> {# Add some top margin if there are framework messages #}
+                {% for framework_message in messages %}
+                    <div class="alert {% if 'success' in framework_message.tags %}alert-success{% elif 'error' in framework_message.tags %}alert-danger{% elif 'warning' in framework_message.tags %}alert-warning{% else %}alert-info{% endif %} p-3 rounded-md flex flex-col space-y-1" role="alert">
+                        <p class="font-medium">
+                            {# A more controlled way to display tag prefixes if you don't want "Safe" #}
+                            {% if 'error' in framework_message.tags %}Error
+                            {% elif 'warning' in framework_message.tags %}Warning
+                            {% elif 'success' in framework_message.tags %}Success
+                            {% else %}Info
+                            {% endif %}:
+                            <span class="font-normal">{{ framework_message|safe }}</span>
+                        </p>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+
+        <hr class="my-6"> {# Increased margin for better visual separation #}
         <div class="text-center">
-            <a href="{% url 'mailer_app:dashboard' %}" class="btn">
-               Go to Homepage
-            </a>
+            <a href="{{ site_home_url|default:'/' }}" class="btn">Go to Our Website</a>
         </div>
     </div>
-    <div class="text-center text-gray-500 text-sm mt-4">
+
+    <div class="text-center text-gray-500 text-sm mt-6"> {# Increased margin #}
         Thank you for your understanding.
     </div>
 </div>

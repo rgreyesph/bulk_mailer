@@ -1,0 +1,146 @@
+{% extends "mailer_app/base.html" %}
+{% load template_filters %}
+
+{% block title %}Manage Segments - Bulk Emailer{% endblock %}
+
+{% block page_title %}Manage Segments{% endblock %}
+
+{% block content %}
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+    <div class="md:col-span-1 card">
+        <h2 class="text-xl font-semibold mb-4 text-indigo-700">Create New Segment</h2>
+        <p class="text-sm text-gray-600 mb-4">Define filters to create a segment of contacts for targeted campaigns.</p>
+        <form method="post" novalidate>
+            {% csrf_token %}
+            {% if form.non_field_errors %}
+                <div class="alert alert-danger mb-4" role="alert">
+                    {% for error in form.non_field_errors %}
+                        <p class="mb-0">{{ error }}</p>
+                    {% endfor %}
+                </div>
+            {% endif %}
+            <div class="space-y-4">
+                <div>
+                    <label for="{{ form.name.id_for_label }}" class="label-text">{{ form.name.label }}</label>
+                    {{ form.name }}
+                    {% if form.name.help_text %}
+                        <p class="mt-1 text-xs text-gray-500">{{ form.name.help_text }}</p>
+                    {% endif %}
+                    {% for error in form.name.errors %}
+                        <p class="text-red-500 text-xs mt-1">{{ error }}</p>
+                    {% endfor %}
+                </div>
+                <div>
+                    <label for="{{ form.subscribed.id_for_label }}" class="label-text">{{ form.subscribed.label }}</label>
+                    {{ form.subscribed }}
+                    {% if form.subscribed.help_text %}
+                        <p class="mt-1 text-xs text-gray-500">{{ form.subscribed.help_text }}</p>
+                    {% endif %}
+                    {% for error in form.subscribed.errors %}
+                        <p class="text-red-500 text-xs mt-1">{{ error }}</p>
+                    {% endfor %}
+                </div>
+                <div>
+                    <label for="{{ form.company.id_for_label }}" class="label-text">{{ form.company.label }}</label>
+                    {{ form.company }}
+                    {% if form.company.help_text %}
+                        <p class="mt-1 text-xs text-gray-500">{{ form.company.help_text }}</p>
+                    {% endif %}
+                    {% for error in form.company.errors %}
+                        <p class="text-red-500 text-xs mt-1">{{ error }}</p>
+                    {% endfor %}
+                </div>
+                <div>
+                    <label for="{{ form.custom_field_key.id_for_label }}" class="label-text">{{ form.custom_field_key.label }}</label>
+                    {{ form.custom_field_key }}
+                    {% if form.custom_field_key.help_text %}
+                        <p class="mt-1 text-xs text-gray-500">{{ form.custom_field_key.help_text }}</p>
+                    {% endif %}
+                    {% for error in form.custom_field_key.errors %}
+                        <p class="text-red-500 text-xs mt-1">{{ error }}</p>
+                    {% endfor %}
+                </div>
+                <div>
+                    <label for="{{ form.custom_field_value.id_for_label }}" class="label-text">{{ form.custom_field_value.label }}</label>
+                    {{ form.custom_field_value }}
+                    {% if form.custom_field_value.help_text %}
+                        <p class="mt-1 text-xs text-gray-500">{{ form.custom_field_value.help_text }}</p>
+                    {% endif %}
+                    {% for error in form.custom_field_value.errors %}
+                        <p class="text-red-500 text-xs mt-1">{{ error }}</p>
+                    {% endfor %}
+                </div>
+                <div>
+                    <label class="label-text">{{ form.contact_lists.label }}</label>
+                    <div class="mt-1 p-2 border border-gray-300 rounded-md bg-white shadow-sm" style="max-height: 150px; overflow-y: auto;">
+                        {{ form.contact_lists }}
+                    </div>
+                    {% if form.contact_lists.help_text %}
+                        <p class="mt-1 text-xs text-gray-500">{{ form.contact_lists.help_text }}</p>
+                    {% endif %}
+                    {% for error in form.contact_lists.errors %}
+                        <p class="text-red-500 text-xs mt-1">{{ error }}</p>
+                    {% endfor %}
+                </div>
+            </div>
+            <hr class="my-6">
+            <div class="flex justify-end space-x-3">
+                <a href="{% url 'mailer_app:dashboard' %}" class="btn-secondary">Cancel</a>
+                <button type="submit" class="btn">Create Segment</button>
+            </div>
+        </form>
+    </div>
+    <div class="md:col-span-2 card">
+        <h2 class="text-xl font-semibold mb-4 text-indigo-700">Existing Segments</h2>
+        {% if segments_with_counts %}
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contacts</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Filters</th>
+                            <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        {% for item in segments_with_counts %}
+                        <tr>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                <a href="{% url 'mailer_app:view_segment_contacts' segment_id=item.segment.id %}" class="link">{{ item.segment.name }}</a>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ item.contact_count }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                {% if item.segment.filters.subscribed %}Subscribed: {{ item.segment.filters.subscribed|yesno:"Yes,No" }}<br>{% endif %}
+                                {% if item.segment.filters.company %}Company: {{ item.segment.filters.company }}<br>{% endif %}
+                                {% for key, value in item.segment.filters.custom_fields.items %}
+                                    {{ key }}: {{ value }}<br>
+                                {% endfor %}
+                                {% if item.segment.filters.contact_lists and item.contact_lists %}
+                                    Contact Lists: 
+                                    {% for cl_id in item.segment.filters.contact_lists %}
+                                        {{ item.contact_lists|get_item:cl_id }}{% if not forloop.last %}, {% endif %}
+                                    {% endfor %}
+                                {% endif %}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-center">
+                                <form action="{% url 'mailer_app:delete_segment' segment_id=item.segment.id %}" method="post" class="inline" onsubmit="return confirm('Are you sure you want to delete segment: {{ item.segment.name|escapejs }}?');">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn-danger btn-sm !px-2 !py-1">Delete</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="4" class="px-6 py-4 text-center text-sm text-gray-500">No segments found.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p class="text-gray-600">No segments have been created yet.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

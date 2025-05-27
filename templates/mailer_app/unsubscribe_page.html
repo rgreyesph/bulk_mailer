@@ -22,15 +22,15 @@
             <hr class="my-4">
             <form method="post" action="{% url 'mailer_app:unsubscribe_contact' token=token %}">
                 {% csrf_token %}
-                <button type="submit" class="btn-danger w-full mb-2 text-sm py-2.5">
+                <button type="submit" name="confirm_unsubscribe" class="btn-danger w-full mb-2 text-sm py-2.5">
                     Yes, Unsubscribe Me
                 </button>
-                <a href="{% url 'mailer_app:dashboard' %}" class="btn-secondary w-full text-sm py-2.5 block text-center">
+                <button type="submit" name="keep_subscribed" class="btn-secondary w-full text-sm py-2.5 block text-center">
                     No, Keep Me Subscribed
-                </a>
+                </button>
             </form>
         {% elif contact and not contact.subscribed %}
-             <div class="alert alert-info">
+            <div class="alert alert-info">
                 <p class="font-medium mb-0"><strong>{{ contact.email|default:"This email address" }}</strong> is already unsubscribed.</p>
                 <p class="text-sm mb-0">No further action is needed.</p>
             </div>

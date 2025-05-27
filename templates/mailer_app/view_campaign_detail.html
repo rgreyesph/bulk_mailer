@@ -44,6 +44,18 @@
                     {% endif %}
                 </div>
                 <div>
+                    <p class="font-medium text-gray-700">Target Segment(s):</p>
+                    {% if campaign.segments.exists %}
+                        <ul class="list-disc list-inside ml-1 text-gray-600">
+                        {% for segment in campaign.segments.all %}
+                            <li>{{ segment.name }}</li>
+                        {% endfor %}
+                        </ul>
+                    {% else %}
+                        <span class="text-gray-500">Not set</span>
+                    {% endif %}
+                </div>
+                <div>
                     <p class="font-medium text-gray-700">Email Template:</p>
                     <p class="text-gray-600">{{ campaign.email_template.name|default:"Not set" }}</p>
                 </div>
@@ -109,7 +121,7 @@
                         Sends a preview of the '{{ campaign.email_template.name }}' template to your specified email address using sample data.
                     </p>
                     <a href="{% url 'mailer_app:preview_email_template_page' campaign.email_template.id %}" class="link text-sm mt-2 inline-block" target="_blank">
-                        Open Template Preview &rarr;
+                        Open Template Preview →
                     </a>
                 {% else %}
                     <p class="text-gray-500">Please select an email template for this campaign to send a test.</p>
@@ -119,21 +131,19 @@
 
         <div class="card">
             <div class="p-4 sm:p-6">
-                <h3 class="text-lg font-semibold text-red-700 mb-3">2. Send Campaign to List(s)</h3>
-                {% if campaign.contact_lists.exists and campaign.email_template %}
+                <h3 class="text-lg font-semibold text-red-700 mb-3">2. Send Campaign</h3>
+                {% if can_send %}
                     <p class="text-sm text-gray-700 mb-3">
                         This will queue the email template '<strong>{{ campaign.email_template.name }}</strong>'
-                        to be sent to all <strong>{{ campaign.total_recipients }}</strong> subscribed contacts in the selected list(s).
+                        to be sent to all <strong>{{ campaign.total_recipients }}</strong> subscribed contacts in the selected list(s) or segment(s).
                     </p>
                     <form action="{% url 'mailer_app:execute_send_campaign' campaign.id %}" method="post" onsubmit="return confirm('Are you absolutely sure you want to queue this campaign for sending to {{ campaign.total_recipients }} contacts? This action will start the process.');">
                         {% csrf_token %}
-                        <button type="submit" class="btn-danger w-full">
-                            QUEUE CAMPAIGN FOR SENDING
-                        </button>
+                        <button type="submit" class="btn-danger w-full">QUEUE CAMPAIGN FOR SENDING</button>
                     </form>
-                    <p class="text-xs text-red-600 mt-2 font-semibold">Warning: This will queue the campaign. Ensure template and lists are correct.</p>
+                    <p class="text-xs text-red-600 mt-2 font-semibold">Warning: This will queue the campaign. Ensure template and targets are correct.</p>
                 {% else %}
-                    <p class="text-gray-500">Please ensure at least one contact list and an email template are selected for this campaign before sending.</p>
+                    <p class="text-gray-500">Cannot send campaign. Ensure the campaign is in a valid state ('Draft', 'Failed', or 'Scheduled'), has an email template, and is linked to at least one contact list or segment.</p>
                 {% endif %}
             </div>
         </div>
@@ -191,7 +201,7 @@
                                         <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">Failed</span>
                                     {% endif %}
                                 </td>
-                                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{{ log.sent_at|date:"Y-m-d H:i:s" }}</td>
+                                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{{ log.sent_at|date:"Y-m-d H:i" }}</td>
                                 <td class="px-4 py-3 text-xs text-gray-500 break-all">
                                     {% if log.status == 'success' and log.message_id %}
                                         {{ log.message_id }}

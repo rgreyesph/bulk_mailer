@@ -2,7 +2,7 @@
 import csv
 import io
 import uuid
-import os 
+import os
 import logging
 
 from django.shortcuts import render, redirect, get_object_or_404
@@ -10,7 +10,7 @@ from django.http import HttpResponse, Http404
 from django.contrib import messages
 from django.core.mail import send_mail
 from django.template import Context, Template as DjangoTemplate, TemplateSyntaxError
-from django.conf import settings as django_settings 
+from django.conf import settings as django_settings
 from django.utils.html import strip_tags, escape
 from django.utils import timezone
 from django.views.decorators.clickjacking import xframe_options_sameorigin
@@ -20,16 +20,15 @@ from django.contrib.sites.shortcuts import get_current_site
 from django.core.files.storage import default_storage
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 
-
 from .models import (
-    Contact, ContactList, EmailTemplate, Campaign, CampaignSendLog, 
-    Settings as AppSettings, MediaAsset
+    Contact, ContactList, EmailTemplate, Campaign, CampaignSendLog,
+    Settings as AppSettings, MediaAsset, Segment
 )
 from .forms import (
-    CSVImportForm, EmailTemplateForm, CampaignForm, SendTestEmailForm, 
-    ContactForm, SettingsForm, MediaUploadForm
+    CSVImportForm, EmailTemplateForm, CampaignForm, SendTestEmailForm,
+    ContactForm, SettingsForm, MediaUploadForm, ContactFilterForm, SegmentForm
 )
-
+from bs4 import BeautifulSoup
 logger = logging.getLogger(__name__)
 
 # Helper Functions
@@ -44,24 +43,16 @@ def _get_sample_context(request, contact_list_instance=None):
     company_address_from_settings = settings_obj.company_address if settings_obj else "123 Main St, Anytown"
     site_url_from_settings = settings_obj.site_url if settings_obj else f"{request.scheme}://{request.get_host()}"
 
-    dummy_token = uuid.uuid4() 
-    unsubscribe_url_for_sample = "#"
+    dummy_token = uuid.uuid4()
     protocol = request.scheme
-    domain = request.get_host() 
+    domain = request.get_host()
 
     try:
-        current_site_obj = get_current_site(request)
-        domain = current_site_obj.domain
         path = reverse('mailer_app:unsubscribe_contact', kwargs={'token': str(dummy_token)})
         unsubscribe_url_for_sample = f"{protocol}://{domain}{path}"
     except Exception as e:
-        logger.warning(f"Could not generate sample unsubscribe URL using Site framework: {e}")
-        try:
-            path = reverse('mailer_app:unsubscribe_contact', kwargs={'token': str(dummy_token)})
-            unsubscribe_url_for_sample = f"{protocol}://{request.get_host()}{path}"
-        except Exception as e_fallback:
-            logger.error(f"Fallback sample unsubscribe URL generation failed: {e_fallback}")
-            unsubscribe_url_for_sample = f"{protocol}://{request.get_host()}/unsubscribe-link-error/{dummy_token}/"
+        logger.error(f"Error generating unsubscribe URL: {e}", exc_info=True)
+        unsubscribe_url_for_sample = f"{protocol}://{domain}/unsubscribe/sample/{dummy_token}/"
 
     sample_data = {
         "email": "john.doe@example.com", "first_name": "John", "last_name": "Doe",
@@ -71,7 +62,7 @@ def _get_sample_context(request, contact_list_instance=None):
         "your_company_name": company_name_from_settings,
         "company_address": company_address_from_settings,
         "site_url": site_url_from_settings,
-        "tracking_pixel": "#" 
+        "tracking_pixel": "#"
     }
     if contact_list_instance:
         first_contact = contact_list_instance.contacts.all().first()
@@ -250,52 +241,64 @@ def view_contact_list(request, list_id):
 
     # --- Sorting Logic ---
     allowed_sort_fields = ['email', 'first_name', 'last_name', 'subscribed', 'created_at']
-    sort_by_param = request.GET.get('sort_by', 'email') # Default sort by email
-    order_param = request.GET.get('order', 'asc')       # Default order ascending
+    sort_by_param = request.GET.get('sort_by', 'email')
+    order_param = request.GET.get('order', 'asc')
 
-    # Validate sort_by parameter
     if sort_by_param not in allowed_sort_fields:
-        sort_by = 'email' # Fallback to default if invalid sort field
+        sort_by = 'email'
         logger.warning(f"Invalid sort_by parameter '{sort_by_param}', defaulting to 'email'.")
     else:
         sort_by = sort_by_param
-    
-    # Validate order parameter
+
     if order_param not in ['asc', 'desc']:
-        order = 'asc' # Fallback to default order
+        order = 'asc'
         logger.warning(f"Invalid order parameter '{order_param}', defaulting to 'asc'.")
     else:
         order = order_param
 
     order_prefix = '' if order == 'asc' else '-'
     order_by_field = f"{order_prefix}{sort_by}"
-    
-    all_contacts_qs = contact_list_obj.contacts.all().order_by(order_by_field)
-    # --- End Sorting Logic ---
 
-    pre_pagination_count = all_contacts_qs.count()
+    # --- Filtering Logic ---
+    filter_form = ContactFilterForm(request.GET)
+    contacts_qs = contact_list_obj.contacts.all()
+
+    if filter_form.is_valid():
+        if filter_form.cleaned_data['subscribed']:
+            subscribed = filter_form.cleaned_data['subscribed'] == 'true'
+            contacts_qs = contacts_qs.filter(subscribed=subscribed)
+        if filter_form.cleaned_data['company']:
+            contacts_qs = contacts_qs.filter(company__icontains=filter_form.cleaned_data['company'])
+        if filter_form.cleaned_data['custom_field_key'] and filter_form.cleaned_data['custom_field_value']:
+            key = filter_form.cleaned_data['custom_field_key']
+            value = filter_form.cleaned_data['custom_field_value']
+            contacts_qs = contacts_qs.filter(custom_fields__has_key=key, custom_fields__contains={key: value})
+
+    contacts_qs = contacts_qs.order_by(order_by_field)
+
+    # --- Pagination ---
+    pre_pagination_count = contacts_qs.count()
     logger.info(f"Found {pre_pagination_count} contacts for list {list_id} before pagination (sorted by {order_by_field}).")
 
-    paginator = Paginator(all_contacts_qs, 25) # Show 25 contacts per page
+    paginator = Paginator(contacts_qs, 25)
     page_number = request.GET.get('page')
     logger.info(f"Requested page number: {page_number}")
 
     try:
         contacts_page_obj = paginator.page(page_number)
     except PageNotAnInteger:
-        # If page is not an integer, deliver first page.
         contacts_page_obj = paginator.page(1)
     except EmptyPage:
-        # If page is out of range (e.g. 9999), deliver last page of results.
         contacts_page_obj = paginator.page(paginator.num_pages)
-    
+
     logger.info(f"Serving page {contacts_page_obj.number} with {len(contacts_page_obj.object_list)} contacts. Total pages: {paginator.num_pages}.")
 
     context = {
         'contact_list': contact_list_obj,
         'contacts_page_obj': contacts_page_obj,
-        'current_sort_by': sort_by, # Pass current sort field to template
-        'current_order': order,     # Pass current sort order to template
+        'filter_form': filter_form,
+        'current_sort_by': sort_by,
+        'current_order': order,
         'title': f"View List: {contact_list_obj.name}"
     }
     return render(request, 'mailer_app/view_contact_list.html', context)
@@ -435,6 +438,7 @@ def preview_email_template_page(request, template_id):
         'title': f"Preview: {template_instance.name}"
     })
 
+# START MARKER FOR get_rendered_email_content IN views.py (REPLACE THE ENTIRE FUNCTION)
 @xframe_options_sameorigin
 @login_required
 def get_rendered_email_content(request, template_id):
@@ -444,23 +448,71 @@ def get_rendered_email_content(request, template_id):
     if contact_list_id:
         try:
             contact_list_for_sample = ContactList.objects.get(id=contact_list_id)
-        except ContactList.DoesNotExist: pass            
+        except ContactList.DoesNotExist:
+            pass
+
     sample_context = _get_sample_context(request, contact_list_instance=contact_list_for_sample)
+
     try:
-        rendered_html = _render_email_content(template_instance.html_content, sample_context)
-        rendered_footer = _render_email_content(template_instance.footer_html, sample_context)
-        full_rendered_html = rendered_html + rendered_footer
+        # Render main HTML content and footer content separately
+        rendered_html_body_full_doc = _render_email_content(template_instance.html_content, sample_context)
+        rendered_footer_content = _render_email_content(template_instance.footer_html, sample_context)
+
+        # Use BeautifulSoup to inject footer
+        soup = BeautifulSoup(rendered_html_body_full_doc, 'html.parser')
+
+        # Prepare footer div as a BeautifulSoup object
+        # Added clear:both and width:100% for better block behavior within various layouts
+        footer_div_str = f'<div style="text-align: center; padding-top: 20px; font-size: 12px; color: #777; clear:both; width:100%;">{rendered_footer_content}</div>'
+        footer_soup_element = BeautifulSoup(footer_div_str, 'html.parser')
+
+        # Prepare tracking pixel if available in sample context
+        # The tracking_pixel in sample_context should be the raw <img> tag string
+        tracking_pixel_html_str = sample_context.get('tracking_pixel', '')
+        tracking_pixel_soup_element = BeautifulSoup(tracking_pixel_html_str, 'html.parser')
+
+        if soup.body:
+            # Append the actual elements from the parsed footer and tracking pixel
+            if footer_soup_element.contents: # Check if footer_soup_element has actual content
+                for child in footer_soup_element.contents:
+                    soup.body.append(child.extract() if hasattr(child, 'extract') else child) # extract child to move it
+
+            if tracking_pixel_html_str and tracking_pixel_soup_element.contents:
+                for child in tracking_pixel_soup_element.contents:
+                    soup.body.append(child.extract() if hasattr(child, 'extract') else child)
+        else:
+            # Fallback if no <body> tag is found (e.g., user provided an HTML fragment)
+            # Wrap the fragment and then append footer and tracking pixel
+            original_content_str = str(soup)
+            soup = BeautifulSoup(f"<body>{original_content_str}</body>", "html.parser") # Create a body
+
+            if footer_soup_element.contents:
+                for child in footer_soup_element.contents:
+                    soup.body.append(child.extract() if hasattr(child, 'extract') else child)
+
+            if tracking_pixel_html_str and tracking_pixel_soup_element.contents:
+                for child in tracking_pixel_soup_element.contents:
+                    soup.body.append(child.extract() if hasattr(child, 'extract') else child)
+
+        full_rendered_html = str(soup)
+
+        logger.debug(f"Rendered HTML for template {template_id} preview: {full_rendered_html[:700]}...")
         return HttpResponse(full_rendered_html)
     except TemplateSyntaxError as e:
         logger.error(f"TemplateSyntaxError rendering template {template_id} for preview: {e}", exc_info=True)
-        error_html = f"""<div style='font-family: sans-serif; padding: 20px; border: 2px solid red; background-color: #ffe0e0;'>
-            <h3 style='color: red;'>Template Rendering Error</h3> <p>Error in HTML content or footer:</p>
-            <pre style='background-color: #f0f0f0; padding: 10px; border-radius: 5px;'>{escape(str(e))}</pre></div>"""
-        return HttpResponse(error_html, status=200)
+        error_html = (
+            f"<div style='font-family: sans-serif; padding: 20px; "
+            f"border: 2px solid red; background-color: #ffe0e0;'>"
+            f"<h3 style='color: red;'>Template Rendering Error</h3>"
+            f"<p>Error in HTML content or footer:</p>"
+            f"<pre style='background-color: #f0f0f0; padding: 10px; "
+            f"border-radius: 5px;'>{escape(str(e))}</pre></div>"
+        )
+        return HttpResponse(error_html, status=200) # Return 200 so iframe shows error
     except Exception as e:
         logger.error(f"Unexpected error rendering template {template_id} for preview: {e}", exc_info=True)
-        return HttpResponse(f"<p style='color:red;'>Error: {escape(str(e))}</p>", status=200)
-
+        return HttpResponse(f"<p style='color:red;'>An unexpected error occurred during preview generation: {escape(str(e))}</p>", status=200)
+# END MARKER FOR get_rendered_email_content IN views.py (REPLACE THE ENTIRE FUNCTION)
 # --- Campaigns ---
 @login_required
 def manage_campaigns(request):
@@ -468,21 +520,45 @@ def manage_campaigns(request):
     if request.method == 'POST':
         form = CampaignForm(request.POST)
         if form.is_valid():
-            campaign = form.save(commit=False) 
-            campaign.save() 
-            form.save_m2m() 
-            if campaign.contact_lists.exists():
-                campaign.total_recipients = Contact.objects.filter(
-                    contact_list__in=campaign.contact_lists.all(),
+            campaign = form.save(commit=False)
+            campaign.save()
+            form.save_m2m()
+            if campaign.contact_lists.exists() or campaign.segments.exists():
+                contacts_qs = Contact.objects.filter(
                     subscribed=True, email__isnull=False
-                ).exclude(email__exact='').distinct().count()
+                ).exclude(email__exact='')
+                if campaign.contact_lists.exists():
+                    contacts_qs = contacts_qs.filter(contact_list__in=campaign.contact_lists.all())
+                if campaign.segments.exists():
+                    segment_filters = []
+                    for segment in campaign.segments.all():
+                        filters = segment.filters
+                        segment_qs = Contact.objects.all()
+                        if filters.get('subscribed'):
+                            subscribed = filters['subscribed'] == 'true'
+                            segment_qs = segment_qs.filter(subscribed=subscribed)
+                        if filters.get('company'):
+                            segment_qs = segment_qs.filter(company__icontains=filters['company'])
+                        if filters.get('custom_fields'):
+                            for key, value in filters['custom_fields'].items():
+                                segment_qs = segment_qs.filter(custom_fields__has_key=key, custom_fields__contains={key: value})
+                        if filters.get('contact_lists'):
+                            segment_qs = segment_qs.filter(contact_list__id__in=filters['contact_lists'])
+                        segment_filters.append(segment_qs.values('id'))
+                    if segment_filters:
+                        combined_ids = set()
+                        for qs in segment_filters:
+                            combined_ids.update(qs.values_list('id', flat=True))
+                        contacts_qs = contacts_qs.filter(id__in=combined_ids)
+                contacts_qs = contacts_qs.distinct()
+                campaign.total_recipients = contacts_qs.count()
             else:
                 campaign.total_recipients = 0
             campaign.save(update_fields=['total_recipients'])
             messages.success(request, f"Campaign '{campaign.name}' saved as {campaign.get_status_display()}.")
             return redirect('mailer_app:view_campaign', campaign_id=campaign.id)
         else:
-            error_list = [f"{(form.fields.get(f).label if form.fields.get(f) else f)}: {', '.join(errs)}" for f, errs in form.errors.items()]
+            error_list = [f"{(form.fields.get(f).label or f)}: {', '.join(errs)}" for f, errs in form.errors.items()]
             messages.error(request, "Could not save campaign: " + "; ".join(error_list))
     else:
         form = CampaignForm()
@@ -506,10 +582,17 @@ def view_campaign(request, campaign_id):
         sample_contact_with_custom = first_contact_list.contacts.filter(custom_fields__isnull=False).first()
         if sample_contact_with_custom and sample_contact_with_custom.custom_fields:
             merge_tags.extend([f"{{{{{key}}}}}" for key in sample_contact_with_custom.custom_fields.keys()])
+    can_send = (
+        campaign_obj.status in ['draft', 'failed', 'scheduled'] and
+        campaign_obj.email_template and
+        (campaign_obj.contact_lists.exists() or campaign_obj.segments.exists())
+    )
     context = {
-        'campaign': campaign_obj, 'test_email_form': test_email_form,
+        'campaign': campaign_obj,
+        'test_email_form': test_email_form,
         'title': f"Campaign: {campaign_obj.name}",
-        'available_merge_tags': sorted(list(set(merge_tags)))
+        'available_merge_tags': sorted(list(set(merge_tags))),
+        'can_send': can_send
     }
     return render(request, 'mailer_app/view_campaign_detail.html', context)
 
@@ -558,9 +641,11 @@ def execute_send_campaign(request, campaign_id):
     if campaign_obj.status in ['sending', 'sent', 'queued'] and campaign_obj.status != 'failed':
         messages.warning(request, f"Campaign '{campaign_obj.name}' is already {campaign_obj.get_status_display()} or has been processed.")
         return redirect('mailer_app:view_campaign', campaign_id=campaign_obj.id)
-    if not campaign_obj.contact_lists.exists() or not campaign_obj.email_template:
-        messages.error(request, "Campaign needs at least one contact list and an email template before sending.")
+    
+    if not (campaign_obj.contact_lists.exists() or campaign_obj.segments.exists()) or not campaign_obj.email_template:
+        messages.error(request, "Campaign needs at least one contact list or segment and an email template before sending.")
         return redirect('mailer_app:view_campaign', campaign_id=campaign_obj.id)
+
     from marketing_emails.tasks import process_campaign_task 
     campaign_obj.status = 'queued' 
     campaign_obj.save(update_fields=['status'])
@@ -569,15 +654,22 @@ def execute_send_campaign(request, campaign_id):
     return redirect('mailer_app:view_campaign', campaign_id=campaign_obj.id)
 
 # --- Unsubscribe & Re-subscribe ---
+# mailer_app/views.py
 def unsubscribe_contact_view(request, token):
+    settings_obj = AppSettings.load() # Load settings
+    site_url_to_redirect = settings_obj.site_url if settings_obj and settings_obj.site_url else "/" # Fallback to root
+
     try:
         valid_token = uuid.UUID(str(token))
         contact_obj = get_object_or_404(Contact, unsubscribe_token=valid_token)
     except (Http404, ValueError):
         messages.error(request, "Invalid or malformed unsubscribe link.")
         return render(request, 'mailer_app/unsubscribe_confirmation.html', {
-            'success': False, 'message': "Invalid or malformed unsubscribe link."
+            'success': False, 
+            'message': "Invalid or malformed unsubscribe link.",
+            'site_home_url': site_url_to_redirect # Pass site_url
         })
+
     if request.method == 'POST':
         if 'confirm_unsubscribe' in request.POST:
             if contact_obj.subscribed:
@@ -586,21 +678,39 @@ def unsubscribe_contact_view(request, token):
                 success_message = f"The email address <strong>{contact_obj.email}</strong> has been successfully unsubscribed."
                 messages.success(request, success_message, extra_tags='safe')
                 return render(request, 'mailer_app/unsubscribe_confirmation.html', {
-                    'success': True, 'confirmation_message': success_message, 'contact_email': contact_obj.email
+                    'success': True, 
+                    'confirmation_message': success_message, 
+                    'contact_email': contact_obj.email,
+                    'site_home_url': site_url_to_redirect # Pass site_url
                 })
-            else:
+            else: # Already unsubscribed
                 info_message = f"The email address <strong>{contact_obj.email}</strong> is already unsubscribed."
                 messages.info(request, info_message, extra_tags='safe')
                 return render(request, 'mailer_app/unsubscribe_confirmation.html', {
-                    'success': None, 'confirmation_message': info_message, 'contact_email': contact_obj.email
+                    'success': None, 
+                    'confirmation_message': info_message, 
+                    'contact_email': contact_obj.email,
+                    'site_home_url': site_url_to_redirect # Pass site_url
                 })
         elif 'keep_subscribed' in request.POST:
+            # This now redirects, so the thank you page will handle its own link
             messages.success(request, f"Thank you for staying subscribed, <strong>{contact_obj.email}</strong>!", extra_tags='safe')
             return redirect('mailer_app:keep_subscribed_thank_you')
-    return render(request, 'mailer_app/unsubscribe_page.html', {'contact': contact_obj, 'token': token})
+
+    # For GET request (initial page load)
+    return render(request, 'mailer_app/unsubscribe_page.html', {
+        'contact': contact_obj, 
+        'token': token,
+        'site_home_url': site_url_to_redirect # Pass site_url for any links on the initial page if needed
+    })
 
 def keep_subscribed_thank_you_view(request):
-    return render(request, 'mailer_app/keep_subscribed_thank_you.html', {'title': "Subscription Confirmed"})
+    settings_obj = AppSettings.load() # Load settings
+    site_url_to_redirect = settings_obj.site_url if settings_obj and settings_obj.site_url else "/" # Fallback
+    return render(request, 'mailer_app/keep_subscribed_thank_you.html', {
+        'title': "Subscription Confirmed",
+        'site_home_url': site_url_to_redirect # Pass site_url
+    })
 
 @login_required 
 def resubscribe_contact_view(request):
@@ -770,3 +880,76 @@ def custom_500(request):
 
 def health_check(request):
     return HttpResponse("OK", status=200)
+
+@login_required
+def manage_segments(request):
+    segments_qs = Segment.objects.all().order_by('-created_at')
+    segments_with_counts = []
+    for segment in segments_qs:
+        contacts_qs = Contact.objects.all()
+        if segment.filters.get('subscribed'):
+            subscribed = segment.filters['subscribed'] == 'true'
+            contacts_qs = contacts_qs.filter(subscribed=subscribed)
+        if segment.filters.get('company'):
+            contacts_qs = contacts_qs.filter(company__icontains=segment.filters['company'])
+        if segment.filters.get('custom_fields'):
+            for key, value in segment.filters['custom_fields'].items():
+                contacts_qs = contacts_qs.filter(custom_fields__has_key=key, custom_fields__contains={key: value})
+        if segment.filters.get('contact_lists'):
+            contacts_qs = contacts_qs.filter(contact_list__id__in=segment.filters['contact_lists'])
+        contact_count = contacts_qs.count()
+        segments_with_counts.append({
+            'segment': segment,
+            'contact_count': contact_count
+        })
+    if request.method == 'POST':
+        form = SegmentForm(request.POST)
+        if form.is_valid():
+            segment = form.save()
+            messages.success(request, f"Segment '{segment.name}' created.")
+            return redirect('mailer_app:manage_segments')
+        else:
+            messages.error(request, "Could not create segment. Please check errors.")
+    else:
+        form = SegmentForm()
+    return render(request, 'mailer_app/manage_segments.html', {
+        'form': form, 'segments_with_counts': segments_with_counts, 'title': "Manage Segments"
+    })
+
+@login_required
+def view_segment_contacts(request, segment_id):
+    segment = get_object_or_404(Segment, id=segment_id)
+    contacts_qs = Contact.objects.all()
+    if segment.filters.get('subscribed'):
+        subscribed = segment.filters['subscribed'] == 'true'
+        contacts_qs = contacts_qs.filter(subscribed=subscribed)
+    if segment.filters.get('company'):
+        contacts_qs = contacts_qs.filter(company__icontains=segment.filters['company'])
+    if segment.filters.get('custom_fields'):
+        for key, value in segment.filters['custom_fields'].items():
+            contacts_qs = contacts_qs.filter(custom_fields__has_key=key, custom_fields__contains={key: value})
+    if segment.filters.get('contact_lists'):
+        contacts_qs = contacts_qs.filter(contact_list__id__in=segment.filters['contact_lists'])
+    contacts_qs = contacts_qs.order_by('email')
+    paginator = Paginator(contacts_qs, 25)
+    page_number = request.GET.get('page')
+    try:
+        contacts_page_obj = paginator.page(page_number)
+    except PageNotAnInteger:
+        contacts_page_obj = paginator.page(1)
+    except EmptyPage:
+        contacts_page_obj = paginator.page(paginator.num_pages)
+    return render(request, 'mailer_app/view_segment_contacts.html', {
+        'segment': segment, 'contacts_page_obj': contacts_page_obj, 'title': f"Contacts in Segment: {segment.name}"
+    })
+
+@login_required
+def delete_segment(request, segment_id):
+    segment = get_object_or_404(Segment, id=segment_id)
+    if request.method == 'POST':
+        segment_name = segment.name
+        segment.delete()
+        messages.success(request, f"Segment '{segment_name}' deleted.")
+        return redirect('mailer_app:manage_segments')
+    messages.warning(request, "Deletion must be confirmed via POST.")
+    return redirect('mailer_app:manage_segments')

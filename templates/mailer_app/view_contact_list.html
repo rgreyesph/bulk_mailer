@@ -24,7 +24,20 @@
         <h3 class="text-lg font-medium text-gray-800">
             Contacts (Page {{ contacts_page_obj.number }} of {{ contacts_page_obj.paginator.num_pages }})
         </h3>
-        {# Optional: Add a search form here later if needed, preserving sort/page parameters #}
+    </div>
+
+    <!-- Filter Form -->
+    <div class="mb-6">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-4 gap-4">
+            {{ filter_form.subscribed }}
+            {{ filter_form.company }}
+            {{ filter_form.custom_field_key }}
+            {{ filter_form.custom_field_value }}
+            <div class="flex space-x-2">
+                <button type="submit" class="btn text-sm">Apply Filters</button>
+                <a href="{% url 'mailer_app:view_contact_list' list_id=contact_list.id %}" class="btn-secondary text-sm">Clear Filters</a>
+            </div>
+        </form>
     </div>
 
     {# Pagination Controls - TOP #}
@@ -32,11 +45,11 @@
     <div class="mb-4 flex items-center justify-between border-b border-t border-gray-200 bg-white px-4 py-3 sm:px-0">
         <div class="flex flex-1 justify-between sm:hidden">
             {% if contacts_page_obj.has_previous %}
-            <a href="?page={{ contacts_page_obj.previous_page_number }}{% if current_sort_by %}&sort_by={{ current_sort_by }}{% endif %}{% if current_order %}&order={{ current_order }}{% endif %}{% if request.GET.q %}&q={{ request.GET.q|urlencode }}{% endif %}"
+            <a href="?page={{ contacts_page_obj.previous_page_number }}{% if current_sort_by %}&sort_by={{ current_sort_by }}{% endif %}{% if current_order %}&order={{ current_order }}{% endif %}{% if filter_form.cleaned_data.subscribed %}&subscribed={{ filter_form.cleaned_data.subscribed }}{% endif %}{% if filter_form.cleaned_data.company %}&company={{ filter_form.cleaned_data.company|urlencode }}{% endif %}{% if filter_form.cleaned_data.custom_field_key %}&custom_field_key={{ filter_form.cleaned_data.custom_field_key|urlencode }}{% endif %}{% if filter_form.cleaned_data.custom_field_value %}&custom_field_value={{ filter_form.cleaned_data.custom_field_value|urlencode }}{% endif %}"
                class="relative inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">Previous</a>
             {% else %}<span class="relative inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-400 cursor-not-allowed">Previous</span>{% endif %}
             {% if contacts_page_obj.has_next %}
-            <a href="?page={{ contacts_page_obj.next_page_number }}{% if current_sort_by %}&sort_by={{ current_sort_by }}{% endif %}{% if current_order %}&order={{ current_order }}{% endif %}{% if request.GET.q %}&q={{ request.GET.q|urlencode }}{% endif %}"
+            <a href="?page={{ contacts_page_obj.next_page_number }}{% if current_sort_by %}&sort_by={{ current_sort_by }}{% endif %}{% if current_order %}&order={{ current_order }}{% endif %}{% if filter_form.cleaned_data.subscribed %}&subscribed={{ filter_form.cleaned_data.subscribed }}{% endif %}{% if filter_form.cleaned_data.company %}&company={{ filter_form.cleaned_data.company|urlencode }}{% endif %}{% if filter_form.cleaned_data.custom_field_key %}&custom_field_key={{ filter_form.cleaned_data.custom_field_key|urlencode }}{% endif %}{% if filter_form.cleaned_data.custom_field_value %}&custom_field_value={{ filter_form.cleaned_data.custom_field_value|urlencode }}{% endif %}"
                class="relative ml-3 inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">Next</a>
             {% else %}<span class="relative ml-3 inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-400 cursor-not-allowed">Next</span>{% endif %}
         </div>
@@ -51,40 +64,39 @@
             <div>
                 <nav class="isolate inline-flex -space-x-px rounded-md shadow-sm" aria-label="Pagination">
                     {% if contacts_page_obj.has_previous %}
-                    <a href="?page=1{% if current_sort_by %}&sort_by={{ current_sort_by }}{% endif %}{% if current_order %}&order={{ current_order }}{% endif %}{% if request.GET.q %}&q={{ request.GET.q|urlencode }}{% endif %}"
-                       class="relative inline-flex items-center rounded-l-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0" aria-label="First"><span class="sr-only">First</span>&laquo;</a>
-                    <a href="?page={{ contacts_page_obj.previous_page_number }}{% if current_sort_by %}&sort_by={{ current_sort_by }}{% endif %}{% if current_order %}&order={{ current_order }}{% endif %}{% if request.GET.q %}&q={{ request.GET.q|urlencode }}{% endif %}"
-                       class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0" aria-label="Previous"><span class="sr-only">Previous</span>&lsaquo;</a>
+                    <a href="?page=1{% if current_sort_by %}&sort_by={{ current_sort_by }}{% endif %}{% if current_order %}&order={{ current_order }}{% endif %}{% if filter_form.cleaned_data.subscribed %}&subscribed={{ filter_form.cleaned_data.subscribed }}{% endif %}{% if filter_form.cleaned_data.company %}&company={{ filter_form.cleaned_data.company|urlencode }}{% endif %}{% if filter_form.cleaned_data.custom_field_key %}&custom_field_key={{ filter_form.cleaned_data.custom_field_key|urlencode }}{% endif %}{% if filter_form.cleaned_data.custom_field_value %}&custom_field_value={{ filter_form.cleaned_data.custom_field_value|urlencode }}{% endif %}"
+                       class="relative inline-flex items-center rounded-l-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0" aria-label="First"><span class="sr-only">First</span>«</a>
+                    <a href="?page={{ contacts_page_obj.previous_page_number }}{% if current_sort_by %}&sort_by={{ current_sort_by }}{% endif %}{% if current_order %}&order={{ current_order }}{% endif %}{% if filter_form.cleaned_data.subscribed %}&subscribed={{ filter_form.cleaned_data.subscribed }}{% endif %}{% if filter_form.cleaned_data.company %}&company={{ filter_form.cleaned_data.company|urlencode }}{% endif %}{% if filter_form.cleaned_data.custom_field_key %}&custom_field_key={{ filter_form.cleaned_data.custom_field_key|urlencode }}{% endif %}{% if filter_form.cleaned_data.custom_field_value %}&custom_field_value={{ filter_form.cleaned_data.custom_field_value|urlencode }}{% endif %}"
+                       class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0" aria-label="Previous"><span class="sr-only">Previous</span>‹</a>
                     {% else %}
-                    <span class="relative inline-flex items-center rounded-l-md px-2 py-2 text-gray-300 ring-1 ring-inset ring-gray-300 cursor-not-allowed" aria-hidden="true">&laquo;</span>
-                    <span class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-400 ring-1 ring-inset ring-gray-300 cursor-not-allowed" aria-hidden="true">&lsaquo;</span>
+                    <span class="relative inline-flex items-center rounded-l-md px-2 py-2 text-gray-300 ring-1 ring-inset ring-gray-300 cursor-not-allowed" aria-hidden="true">«</span>
+                    <span class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-400 ring-1 ring-inset ring-gray-300 cursor-not-allowed" aria-hidden="true">‹</span>
                     {% endif %}
-                    {# Page numbers - can be made more complex to show a range e.g. ... 3 4 5 ... #}
                     {% for i in contacts_page_obj.paginator.page_range %}
                         {% if contacts_page_obj.number == i %}
                             <span aria-current="page" class="relative z-10 inline-flex items-center bg-indigo-600 px-4 py-2 text-sm font-semibold text-white focus:z-20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">{{ i }}</span>
                         {% elif i > contacts_page_obj.number|add:'-3' and i < contacts_page_obj.number|add:'3' %}
-                            <a href="?page={{ i }}{% if current_sort_by %}&sort_by={{ current_sort_by }}{% endif %}{% if current_order %}&order={{ current_order }}{% endif %}{% if request.GET.q %}&q={{ request.GET.q|urlencode }}{% endif %}" class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0">{{ i }}</a>
-                        {% elif i == contacts_page_obj.paginator.page_range.0 or i == contacts_page_obj.paginator.page_range.1 %} {# Ellipsis logic start #}
-                            {% if i == contacts_page_obj.number|add:'-3' or i == contacts_page_obj.number|add:'-4' %} {# Avoid double ellipsis #}
+                            <a href="?page={{ i }}{% if current_sort_by %}&sort_by={{ current_sort_by }}{% endif %}{% if current_order %}&order={{ current_order }}{% endif %}{% if filter_form.cleaned_data.subscribed %}&subscribed={{ filter_form.cleaned_data.subscribed }}{% endif %}{% if filter_form.cleaned_data.company %}&company={{ filter_form.cleaned_data.company|urlencode }}{% endif %}{% if filter_form.cleaned_data.custom_field_key %}&custom_field_key={{ filter_form.cleaned_data.custom_field_key|urlencode }}{% endif %}{% if filter_form.cleaned_data.custom_field_value %}&custom_field_value={{ filter_form.cleaned_data.custom_field_value|urlencode }}{% endif %}" class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0">{{ i }}</a>
+                        {% elif i == contacts_page_obj.paginator.page_range.0 or i == contacts_page_obj.paginator.page_range.1 %}
+                            {% if i == contacts_page_obj.number|add:'-3' or i == contacts_page_obj.number|add:'-4' %}
                             {% else %}
                             <span class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-700 ring-1 ring-inset ring-gray-300 focus:outline-offset-0">...</span>
                             {% endif %}
-                        {% elif i == contacts_page_obj.paginator.num_pages or i == contacts_page_obj.paginator.num_pages|add:'-1'  %} {# Ellipsis logic end #}
-                             {% if i == contacts_page_obj.number|add:'3' or i == contacts_page_obj.number|add:'4' %} {# Avoid double ellipsis #}
-                             {% else %}
-                             <span class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-700 ring-1 ring-inset ring-gray-300 focus:outline-offset-0">...</span>
-                             {% endif %}
+                        {% elif i == contacts_page_obj.paginator.num_pages or i == contacts_page_obj.paginator.num_pages|add:'-1' %}
+                            {% if i == contacts_page_obj.number|add:'3' or i == contacts_page_obj.number|add:'4' %}
+                            {% else %}
+                            <span class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-700 ring-1 ring-inset ring-gray-300 focus:outline-offset-0">...</span>
+                            {% endif %}
                         {% endif %}
                     {% endfor %}
                     {% if contacts_page_obj.has_next %}
-                    <a href="?page={{ contacts_page_obj.next_page_number }}{% if current_sort_by %}&sort_by={{ current_sort_by }}{% endif %}{% if current_order %}&order={{ current_order }}{% endif %}{% if request.GET.q %}&q={{ request.GET.q|urlencode }}{% endif %}"
-                       class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0" aria-label="Next"><span class="sr-only">Next</span>&rsaquo;</a>
-                    <a href="?page={{ contacts_page_obj.paginator.num_pages }}{% if current_sort_by %}&sort_by={{ current_sort_by }}{% endif %}{% if current_order %}&order={{ current_order }}{% endif %}{% if request.GET.q %}&q={{ request.GET.q|urlencode }}{% endif %}"
-                       class="relative inline-flex items-center rounded-r-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0" aria-label="Last"><span class="sr-only">Last</span>&raquo;</a>
+                    <a href="?page={{ contacts_page_obj.next_page_number }}{% if current_sort_by %}&sort_by={{ current_sort_by }}{% endif %}{% if current_order %}&order={{ current_order }}{% endif %}{% if filter_form.cleaned_data.subscribed %}&subscribed={{ filter_form.cleaned_data.subscribed }}{% endif %}{% if filter_form.cleaned_data.company %}&company={{ filter_form.cleaned_data.company|urlencode }}{% endif %}{% if filter_form.cleaned_data.custom_field_key %}&custom_field_key={{ filter_form.cleaned_data.custom_field_key|urlencode }}{% endif %}{% if filter_form.cleaned_data.custom_field_value %}&custom_field_value={{ filter_form.cleaned_data.custom_field_value|urlencode }}{% endif %}"
+                       class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0" aria-label="Next"><span class="sr-only">Next</span>›</a>
+                    <a href="?page={{ contacts_page_obj.paginator.num_pages }}{% if current_sort_by %}&sort_by={{ current_sort_by }}{% endif %}{% if current_order %}&order={{ current_order }}{% endif %}{% if filter_form.cleaned_data.subscribed %}&subscribed={{ filter_form.cleaned_data.subscribed }}{% endif %}{% if filter_form.cleaned_data.company %}&company={{ filter_form.cleaned_data.company|urlencode }}{% endif %}{% if filter_form.cleaned_data.custom_field_key %}&custom_field_key={{ filter_form.cleaned_data.custom_field_key|urlencode }}{% endif %}{% if filter_form.cleaned_data.custom_field_value %}&custom_field_value={{ filter_form.cleaned_data.custom_field_value|urlencode }}{% endif %}"
+                       class="relative inline-flex items-center rounded-r-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0" aria-label="Last"><span class="sr-only">Last</span>»</a>
                     {% else %}
-                    <span class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-400 ring-1 ring-inset ring-gray-300 cursor-not-allowed" aria-hidden="true">&rsaquo;</span>
-                    <span class="relative inline-flex items-center rounded-r-md px-2 py-2 text-gray-300 ring-1 ring-inset ring-gray-300 cursor-not-allowed" aria-hidden="true">&raquo;</span>
+                    <span class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-400 ring-1 ring-inset ring-gray-300 cursor-not-allowed" aria-hidden="true">›</span>
+                    <span class="relative inline-flex items-center rounded-r-md px-2 py-2 text-gray-300 ring-1 ring-inset ring-gray-300 cursor-not-allowed" aria-hidden="true">»</span>
                     {% endif %}
                 </nav>
             </div>
@@ -98,47 +110,43 @@
         <table class="min-w-full divide-y divide-gray-200">
             <thead class="bg-gray-50">
                 <tr>
-                    {# --- Sortable Email Header --- #}
                     <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider group">
-                        <a href="?sort_by=email&order={% if current_sort_by == 'email' and current_order == 'asc' %}desc{% else %}asc{% endif %}{% if request.GET.page %}&page={{ request.GET.page }}{% endif %}{% if request.GET.q %}&q={{ request.GET.q|urlencode }}{% endif %}" class="inline-flex items-center hover:text-indigo-700">
+                        <a href="?sort_by=email&order={% if current_sort_by == 'email' and current_order == 'asc' %}desc{% else %}asc{% endif %}{% if request.GET.page %}&page={{ request.GET.page }}{% endif %}{% if filter_form.cleaned_data.subscribed %}&subscribed={{ filter_form.cleaned_data.subscribed }}{% endif %}{% if filter_form.cleaned_data.company %}&company={{ filter_form.cleaned_data.company|urlencode }}{% endif %}{% if filter_form.cleaned_data.custom_field_key %}&custom_field_key={{ filter_form.cleaned_data.custom_field_key|urlencode }}{% endif %}{% if filter_form.cleaned_data.custom_field_value %}&custom_field_value={{ filter_form.cleaned_data.custom_field_value|urlencode }}{% endif %}" class="inline-flex items-center hover:text-indigo-700">
                             Email
                             <span class="ml-1 text-gray-400 group-hover:text-indigo-600">
-                            {% if current_sort_by == 'email' %}{% if current_order == 'asc' %}&uarr;{% else %}&darr;{% endif %}{% else %}&#8693;{% endif %}
+                            {% if current_sort_by == 'email' %}{% if current_order == 'asc' %}↑{% else %}↓{% endif %}{% else %}⇵{% endif %}
                             </span>
                         </a>
                     </th>
-                    {# --- Sortable First Name Header --- #}
                     <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider group">
-                        <a href="?sort_by=first_name&order={% if current_sort_by == 'first_name' and current_order == 'asc' %}desc{% else %}asc{% endif %}{% if request.GET.page %}&page={{ request.GET.page }}{% endif %}{% if request.GET.q %}&q={{ request.GET.q|urlencode }}{% endif %}" class="inline-flex items-center hover:text-indigo-700">
+                        <a href="?sort_by=first_name&order={% if current_sort_by == 'first_name' and current_order == 'asc' %}desc{% else %}asc{% endif %}{% if request.GET.page %}&page={{ request.GET.page }}{% endif %}{% if filter_form.cleaned_data.subscribed %}&subscribed={{ filter_form.cleaned_data.subscribed }}{% endif %}{% if filter_form.cleaned_data.company %}&company={{ filter_form.cleaned_data.company|urlencode }}{% endif %}{% if filter_form.cleaned_data.custom_field_key %}&custom_field_key={{ filter_form.cleaned_data.custom_field_key|urlencode }}{% endif %}{% if filter_form.cleaned_data.custom_field_value %}&custom_field_value={{ filter_form.cleaned_data.custom_field_value|urlencode }}{% endif %}" class="inline-flex items-center hover:text-indigo-700">
                             First Name
                             <span class="ml-1 text-gray-400 group-hover:text-indigo-600">
-                            {% if current_sort_by == 'first_name' %}{% if current_order == 'asc' %}&uarr;{% else %}&darr;{% endif %}{% else %}&#8693;{% endif %}
+                            {% if current_sort_by == 'first_name' %}{% if current_order == 'asc' %}↑{% else %}↓{% endif %}{% else %}⇵{% endif %}
                             </span>
                         </a>
                     </th>
-                    {# --- Sortable Last Name Header --- #}
                     <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider group">
-                        <a href="?sort_by=last_name&order={% if current_sort_by == 'last_name' and current_order == 'asc' %}desc{% else %}asc{% endif %}{% if request.GET.page %}&page={{ request.GET.page }}{% endif %}{% if request.GET.q %}&q={{ request.GET.q|urlencode }}{% endif %}" class="inline-flex items-center hover:text-indigo-700">
+                        <a href="?sort_by=last_name&order={% if current_sort_by == 'last_name' and current_order == 'asc' %}desc{% else %}asc{% endif %}{% if request.GET.page %}&page={{ request.GET.page }}{% endif %}{% if filter_form.cleaned_data.subscribed %}&subscribed={{ filter_form.cleaned_data.subscribed }}{% endif %}{% if filter_form.cleaned_data.company %}&company={{ filter_form.cleaned_data.company|urlencode }}{% endif %}{% if filter_form.cleaned_data.custom_field_key %}&custom_field_key={{ filter_form.cleaned_data.custom_field_key|urlencode }}{% endif %}{% if filter_form.cleaned_data.custom_field_value %}&custom_field_value={{ filter_form.cleaned_data.custom_field_value|urlencode }}{% endif %}" class="inline-flex items-center hover:text-indigo-700">
                             Last Name
                             <span class="ml-1 text-gray-400 group-hover:text-indigo-600">
-                            {% if current_sort_by == 'last_name' %}{% if current_order == 'asc' %}&uarr;{% else %}&darr;{% endif %}{% else %}&#8693;{% endif %}
+                            {% if current_sort_by == 'last_name' %}{% if current_order == 'asc' %}↑{% else %}↓{% endif %}{% else %}⇵{% endif %}
                             </span>
                         </a>
                     </th>
-                    {# --- Sortable Subscribed Header --- #}
                     <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider group">
-                        <a href="?sort_by=subscribed&order={% if current_sort_by == 'subscribed' and current_order == 'asc' %}desc{% else %}asc{% endif %}{% if request.GET.page %}&page={{ request.GET.page }}{% endif %}{% if request.GET.q %}&q={{ request.GET.q|urlencode }}{% endif %}" class="inline-flex items-center hover:text-indigo-700">
+                        <a href="?sort_by=subscribed&order={% if current_sort_by == 'subscribed' and current_order == 'asc' %}desc{% else %}asc{% endif %}{% if request.GET.page %}&page={{ request.GET.page }}{% endif %}{% if filter_form.cleaned_data.subscribed %}&subscribed={{ filter_form.cleaned_data.subscribed }}{% endif %}{% if filter_form.cleaned_data.company %}&company={{ filter_form.cleaned_data.company|urlencode }}{% endif %}{% if filter_form.cleaned_data.custom_field_key %}&custom_field_key={{ filter_form.cleaned_data.custom_field_key|urlencode }}{% endif %}{% if filter_form.cleaned_data.custom_field_value %}&custom_field_value={{ filter_form.cleaned_data.custom_field_value|urlencode }}{% endif %}" class="inline-flex items-center hover:text-indigo-700">
                             Subscribed
                             <span class="ml-1 text-gray-400 group-hover:text-indigo-600">
-                            {% if current_sort_by == 'subscribed' %}{% if current_order == 'asc' %}&uarr;{% else %}&darr;{% endif %}{% else %}&#8693;{% endif %}
+                            {% if current_sort_by == 'subscribed' %}{% if current_order == 'asc' %}↑{% else %}↓{% endif %}{% else %}⇵{% endif %}
                             </span>
                         </a>
                     </th>
-                     <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider group">
-                        <a href="?sort_by=created_at&order={% if current_sort_by == 'created_at' and current_order == 'asc' %}desc{% else %}asc{% endif %}{% if request.GET.page %}&page={{ request.GET.page }}{% endif %}{% if request.GET.q %}&q={{ request.GET.q|urlencode }}{% endif %}" class="inline-flex items-center hover:text-indigo-700">
+                    <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider group">
+                        <a href="?sort_by=created_at&order={% if current_sort_by == 'created_at' and current_order == 'asc' %}desc{% else %}asc{% endif %}{% if request.GET.page %}&page={{ request.GET.page }}{% endif %}{% if filter_form.cleaned_data.subscribed %}&subscribed={{ filter_form.cleaned_data.subscribed }}{% endif %}{% if filter_form.cleaned_data.company %}&company={{ filter_form.cleaned_data.company|urlencode }}{% endif %}{% if filter_form.cleaned_data.custom_field_key %}&custom_field_key={{ filter_form.cleaned_data.custom_field_key|urlencode }}{% endif %}{% if filter_form.cleaned_data.custom_field_value %}&custom_field_value={{ filter_form.cleaned_data.custom_field_value|urlencode }}{% endif %}" class="inline-flex items-center hover:text-indigo-700">
                             Date Added
                             <span class="ml-1 text-gray-400 group-hover:text-indigo-600">
-                            {% if current_sort_by == 'created_at' %}{% if current_order == 'asc' %}&uarr;{% else %}&darr;{% endif %}{% else %}&#8693;{% endif %}
+                            {% if current_sort_by == 'created_at' %}{% if current_order == 'asc' %}↑{% else %}↓{% endif %}{% else %}⇵{% endif %}
                             </span>
                         </a>
                     </th>
@@ -177,11 +185,11 @@
     <div class="mt-6 flex items-center justify-between border-t border-gray-200 bg-white px-4 py-3 sm:px-0">
         <div class="flex flex-1 justify-between sm:hidden">
             {% if contacts_page_obj.has_previous %}
-            <a href="?page={{ contacts_page_obj.previous_page_number }}{% if current_sort_by %}&sort_by={{ current_sort_by }}{% endif %}{% if current_order %}&order={{ current_order }}{% endif %}{% if request.GET.q %}&q={{ request.GET.q|urlencode }}{% endif %}"
+            <a href="?page={{ contacts_page_obj.previous_page_number }}{% if current_sort_by %}&sort_by={{ current_sort_by }}{% endif %}{% if current_order %}&order={{ current_order }}{% endif %}{% if filter_form.cleaned_data.subscribed %}&subscribed={{ filter_form.cleaned_data.subscribed }}{% endif %}{% if filter_form.cleaned_data.company %}&company={{ filter_form.cleaned_data.company|urlencode }}{% endif %}{% if filter_form.cleaned_data.custom_field_key %}&custom_field_key={{ filter_form.cleaned_data.custom_field_key|urlencode }}{% endif %}{% if filter_form.cleaned_data.custom_field_value %}&custom_field_value={{ filter_form.cleaned_data.custom_field_value|urlencode }}{% endif %}"
                class="relative inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">Previous</a>
             {% else %}<span class="relative inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-400 cursor-not-allowed">Previous</span>{% endif %}
             {% if contacts_page_obj.has_next %}
-            <a href="?page={{ contacts_page_obj.next_page_number }}{% if current_sort_by %}&sort_by={{ current_sort_by }}{% endif %}{% if current_order %}&order={{ current_order }}{% endif %}{% if request.GET.q %}&q={{ request.GET.q|urlencode }}{% endif %}"
+            <a href="?page={{ contacts_page_obj.next_page_number }}{% if current_sort_by %}&sort_by={{ current_sort_by }}{% endif %}{% if current_order %}&order={{ current_order }}{% endif %}{% if filter_form.cleaned_data.subscribed %}&subscribed={{ filter_form.cleaned_data.subscribed }}{% endif %}{% if filter_form.cleaned_data.company %}&company={{ filter_form.cleaned_data.company|urlencode }}{% endif %}{% if filter_form.cleaned_data.custom_field_key %}&custom_field_key={{ filter_form.cleaned_data.custom_field_key|urlencode }}{% endif %}{% if filter_form.cleaned_data.custom_field_value %}&custom_field_value={{ filter_form.cleaned_data.custom_field_value|urlencode }}{% endif %}"
                class="relative ml-3 inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">Next</a>
             {% else %}<span class="relative ml-3 inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-400 cursor-not-allowed">Next</span>{% endif %}
         </div>
@@ -196,34 +204,39 @@
             <div>
                 <nav class="isolate inline-flex -space-x-px rounded-md shadow-sm" aria-label="Pagination">
                     {% if contacts_page_obj.has_previous %}
-                    <a href="?page=1{% if current_sort_by %}&sort_by={{ current_sort_by }}{% endif %}{% if current_order %}&order={{ current_order }}{% endif %}{% if request.GET.q %}&q={{ request.GET.q|urlencode }}{% endif %}"
-                       class="relative inline-flex items-center rounded-l-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0" aria-label="First"><span class="sr-only">First</span>&laquo;</a>
-                    <a href="?page={{ contacts_page_obj.previous_page_number }}{% if current_sort_by %}&sort_by={{ current_sort_by }}{% endif %}{% if current_order %}&order={{ current_order }}{% endif %}{% if request.GET.q %}&q={{ request.GET.q|urlencode }}{% endif %}"
-                       class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0" aria-label="Previous"><span class="sr-only">Previous</span>&lsaquo;</a>
+                    <a href="?page=1{% if current_sort_by %}&sort_by={{ current_sort_by }}{% endif %}{% if current_order %}&order={{ current_order }}{% endif %}{% if filter_form.cleaned_data.subscribed %}&subscribed={{ filter_form.cleaned_data.subscribed }}{% endif %}{% if filter_form.cleaned_data.company %}&company={{ filter_form.cleaned_data.company|urlencode }}{% endif %}{% if filter_form.cleaned_data.custom_field_key %}&custom_field_key={{ filter_form.cleaned_data.custom_field_key|urlencode }}{% endif %}{% if filter_form.cleaned_data.custom_field_value %}&custom_field_value={{ filter_form.cleaned_data.custom_field_value|urlencode }}{% endif %}"
+                       class="relative inline-flex items-center rounded-l-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0" aria-label="First"><span class="sr-only">First</span>«</a>
+                    <a href="?page={{ contacts_page_obj.previous_page_number }}{% if current_sort_by %}&sort_by={{ current_sort_by }}{% endif %}{% if current_order %}&order={{ current_order }}{% endif %}{% if filter_form.cleaned_data.subscribed %}&subscribed={{ filter_form.cleaned_data.subscribed }}{% endif %}{% if filter_form.cleaned_data.company %}&company={{ filter_form.cleaned_data.company|urlencode }}{% endif %}{% if filter_form.cleaned_data.custom_field_key %}&custom_field_key={{ filter_form.cleaned_data.custom_field_key|urlencode }}{% endif %}{% if filter_form.cleaned_data.custom_field_value %}&custom_field_value={{ filter_form.cleaned_data.custom_field_value|urlencode }}{% endif %}"
+                       class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0" aria-label="Previous"><span class="sr-only">Previous</span>‹</a>
                     {% else %}
-                    <span class="relative inline-flex items-center rounded-l-md px-2 py-2 text-gray-300 ring-1 ring-inset ring-gray-300 cursor-not-allowed" aria-hidden="true">&laquo;</span>
-                    <span class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-400 ring-1 ring-inset ring-gray-300 cursor-not-allowed" aria-hidden="true">&lsaquo;</span>
+                    <span class="relative inline-flex items-center rounded-l-md px-2 py-2 text-gray-300 ring-1 ring-inset ring-gray-300 cursor-not-allowed" aria-hidden="true">«</span>
+                    <span class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-400 ring-1 ring-inset ring-gray-300 cursor-not-allowed" aria-hidden="true">‹</span>
                     {% endif %}
-                    {# Page numbers - can be made more complex to show a range e.g. ... 3 4 5 ... #}
                     {% for i in contacts_page_obj.paginator.page_range %}
                         {% if contacts_page_obj.number == i %}
                             <span aria-current="page" class="relative z-10 inline-flex items-center bg-indigo-600 px-4 py-2 text-sm font-semibold text-white focus:z-20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">{{ i }}</span>
-                        {% elif i > contacts_page_obj.number|add:'-3' and i < contacts_page_obj.number|add:'3' %} {# Show 2 pages before and 2 after current #}
-                            <a href="?page={{ i }}{% if current_sort_by %}&sort_by={{ current_sort_by }}{% endif %}{% if current_order %}&order={{ current_order }}{% endif %}{% if request.GET.q %}&q={{ request.GET.q|urlencode }}{% endif %}" class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0">{{ i }}</a>
-                        {% elif i == contacts_page_obj.number|add:'-3' and contacts_page_obj.number > 4 %} {# Ellipsis for start #}
+                        {% elif i > contacts_page_obj.number|add:'-3' and i < contacts_page_obj.number|add:'3' %}
+                            <a href="?page={{ i }}{% if current_sort_by %}&sort_by={{ current_sort_by }}{% endif %}{% if current_order %}&order={{ current_order }}{% endif %}{% if filter_form.cleaned_data.subscribed %}&subscribed={{ filter_form.cleaned_data.subscribed }}{% endif %}{% if filter_form.cleaned_data.company %}&company={{ filter_form.cleaned_data.company|urlencode }}{% endif %}{% if filter_form.cleaned_data.custom_field_key %}&custom_field_key={{ filter_form.cleaned_data.custom_field_key|urlencode }}{% endif %}{% if filter_form.cleaned_data.custom_field_value %}&custom_field_value={{ filter_form.cleaned_data.custom_field_value|urlencode }}{% endif %}" class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0">{{ i }}</a>
+                        {% elif i == contacts_page_obj.paginator.page_range.0 or i == contacts_page_obj.paginator.page_range.1 %}
+                            {% if i == contacts_page_obj.number|add:'-3' or i == contacts_page_obj.number|add:'-4' %}
+                            {% else %}
                             <span class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-700 ring-1 ring-inset ring-gray-300 focus:outline-offset-0">...</span>
-                        {% elif i == contacts_page_obj.number|add:'3' and contacts_page_obj.number < contacts_page_obj.paginator.num_pages|add:'-3' %} {# Ellipsis for end #}
+                            {% endif %}
+                        {% elif i == contacts_page_obj.paginator.num_pages or i == contacts_page_obj.paginator.num_pages|add:'-1' %}
+                            {% if i == contacts_page_obj.number|add:'3' or i == contacts_page_obj.number|add:'4' %}
+                            {% else %}
                             <span class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-700 ring-1 ring-inset ring-gray-300 focus:outline-offset-0">...</span>
+                            {% endif %}
                         {% endif %}
                     {% endfor %}
                     {% if contacts_page_obj.has_next %}
-                    <a href="?page={{ contacts_page_obj.next_page_number }}{% if current_sort_by %}&sort_by={{ current_sort_by }}{% endif %}{% if current_order %}&order={{ current_order }}{% endif %}{% if request.GET.q %}&q={{ request.GET.q|urlencode }}{% endif %}"
-                       class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0" aria-label="Next"><span class="sr-only">Next</span>&rsaquo;</a>
-                    <a href="?page={{ contacts_page_obj.paginator.num_pages }}{% if current_sort_by %}&sort_by={{ current_sort_by }}{% endif %}{% if current_order %}&order={{ current_order }}{% endif %}{% if request.GET.q %}&q={{ request.GET.q|urlencode }}{% endif %}"
-                       class="relative inline-flex items-center rounded-r-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0" aria-label="Last"><span class="sr-only">Last</span>&raquo;</a>
+                    <a href="?page={{ contacts_page_obj.next_page_number }}{% if current_sort_by %}&sort_by={{ current_sort_by }}{% endif %}{% if current_order %}&order={{ current_order }}{% endif %}{% if filter_form.cleaned_data.subscribed %}&subscribed={{ filter_form.cleaned_data.subscribed }}{% endif %}{% if filter_form.cleaned_data.company %}&company={{ filter_form.cleaned_data.company|urlencode }}{% endif %}{% if filter_form.cleaned_data.custom_field_key %}&custom_field_key={{ filter_form.cleaned_data.custom_field_key|urlencode }}{% endif %}{% if filter_form.cleaned_data.custom_field_value %}&custom_field_value={{ filter_form.cleaned_data.custom_field_value|urlencode }}{% endif %}"
+                       class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0" aria-label="Next"><span class="sr-only">Next</span>›</a>
+                    <a href="?page={{ contacts_page_obj.paginator.num_pages }}{% if current_sort_by %}&sort_by={{ current_sort_by }}{% endif %}{% if current_order %}&order={{ current_order }}{% endif %}{% if filter_form.cleaned_data.subscribed %}&subscribed={{ filter_form.cleaned_data.subscribed }}{% endif %}{% if filter_form.cleaned_data.company %}&company={{ filter_form.cleaned_data.company|urlencode }}{% endif %}{% if filter_form.cleaned_data.custom_field_key %}&custom_field_key={{ filter_form.cleaned_data.custom_field_key|urlencode }}{% endif %}{% if filter_form.cleaned_data.custom_field_value %}&custom_field_value={{ filter_form.cleaned_data.custom_field_value|urlencode }}{% endif %}"
+                       class="relative inline-flex items-center rounded-r-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0" aria-label="Last"><span class="sr-only">Last</span>»</a>
                     {% else %}
-                    <span class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-400 ring-1 ring-inset ring-gray-300 cursor-not-allowed" aria-hidden="true">&rsaquo;</span>
-                    <span class="relative inline-flex items-center rounded-r-md px-2 py-2 text-gray-300 ring-1 ring-inset ring-gray-300 cursor-not-allowed" aria-hidden="true">&raquo;</span>
+                    <span class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-400 ring-1 ring-inset ring-gray-300 cursor-not-allowed" aria-hidden="true">›</span>
+                    <span class="relative inline-flex items-center rounded-r-md px-2 py-2 text-gray-300 ring-1 ring-inset ring-gray-300 cursor-not-allowed" aria-hidden="true">»</span>
                     {% endif %}
                 </nav>
             </div>
