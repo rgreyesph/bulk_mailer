@@ -7,6 +7,8 @@ import logging
 
 from django.shortcuts import render, redirect, get_object_or_404
 from django.http import HttpResponse, Http404
+from django.http import HttpResponseNotFound
+
 from django.contrib import messages
 from django.core.mail import send_mail
 from django.template import Context, Template as DjangoTemplate, TemplateSyntaxError
@@ -29,6 +31,7 @@ from .forms import (
     ContactForm, SettingsForm, MediaUploadForm, ContactFilterForm, SegmentForm
 )
 from bs4 import BeautifulSoup
+from urllib.parse import unquote
 logger = logging.getLogger(__name__)
 
 # Helper Functions
@@ -655,9 +658,10 @@ def execute_send_campaign(request, campaign_id):
 
 # --- Unsubscribe & Re-subscribe ---
 # mailer_app/views.py
+# mailer_app/views.py
 def unsubscribe_contact_view(request, token):
-    settings_obj = AppSettings.load() # Load settings
-    site_url_to_redirect = settings_obj.site_url if settings_obj and settings_obj.site_url else "/" # Fallback to root
+    app_settings = AppSettings.load()  # Load settings once at the beginning
+    site_url_to_redirect = app_settings.site_url if app_settings and app_settings.site_url else "/"
 
     try:
         valid_token = uuid.UUID(str(token))
@@ -665,51 +669,63 @@ def unsubscribe_contact_view(request, token):
     except (Http404, ValueError):
         messages.error(request, "Invalid or malformed unsubscribe link.")
         return render(request, 'mailer_app/unsubscribe_confirmation.html', {
-            'success': False, 
+            'success': False,
             'message': "Invalid or malformed unsubscribe link.",
-            'site_home_url': site_url_to_redirect # Pass site_url
+            'site_home_url': site_url_to_redirect,
+            'app_settings': app_settings
         })
 
     if request.method == 'POST':
         if 'confirm_unsubscribe' in request.POST:
             if contact_obj.subscribed:
+                # --- THIS IS THE CORE UNSUBSCRIBE LOGIC ---
                 contact_obj.subscribed = False
+                contact_obj.updated_at = timezone.now() # Explicitly update timestamp
                 contact_obj.save(update_fields=['subscribed', 'updated_at'])
+                # --- DEFINE success_message HERE ---
                 success_message = f"The email address <strong>{contact_obj.email}</strong> has been successfully unsubscribed."
+                
                 messages.success(request, success_message, extra_tags='safe')
                 return render(request, 'mailer_app/unsubscribe_confirmation.html', {
-                    'success': True, 
-                    'confirmation_message': success_message, 
+                    'success': True,
+                    'confirmation_message': success_message, # Now success_message is defined
                     'contact_email': contact_obj.email,
-                    'site_home_url': site_url_to_redirect # Pass site_url
+                    'site_home_url': site_url_to_redirect,
+                    'app_settings': app_settings
                 })
-            else: # Already unsubscribed
+            else:  # Contact was already unsubscribed
+                # --- DEFINE info_message HERE ---
                 info_message = f"The email address <strong>{contact_obj.email}</strong> is already unsubscribed."
+                
                 messages.info(request, info_message, extra_tags='safe')
                 return render(request, 'mailer_app/unsubscribe_confirmation.html', {
-                    'success': None, 
-                    'confirmation_message': info_message, 
+                    'success': None,  # Using None to differentiate from an error (False)
+                    'confirmation_message': info_message, # Now info_message is defined
                     'contact_email': contact_obj.email,
-                    'site_home_url': site_url_to_redirect # Pass site_url
+                    'site_home_url': site_url_to_redirect,
+                    'app_settings': app_settings
                 })
         elif 'keep_subscribed' in request.POST:
-            # This now redirects, so the thank you page will handle its own link
+            # This part was working for you
             messages.success(request, f"Thank you for staying subscribed, <strong>{contact_obj.email}</strong>!", extra_tags='safe')
             return redirect('mailer_app:keep_subscribed_thank_you')
-
-    # For GET request (initial page load)
+    
+    # This is for the GET request (when the user first lands on the page)
+    # It renders unsubscribe_page.html to ask for confirmation
     return render(request, 'mailer_app/unsubscribe_page.html', {
-        'contact': contact_obj, 
-        'token': token,
-        'site_home_url': site_url_to_redirect # Pass site_url for any links on the initial page if needed
+        'contact': contact_obj,
+        'token': token, # Pass token for the form action URL
+        'site_home_url': site_url_to_redirect, # If needed on this page
+        'app_settings': app_settings
     })
 
 def keep_subscribed_thank_you_view(request):
-    settings_obj = AppSettings.load() # Load settings
-    site_url_to_redirect = settings_obj.site_url if settings_obj and settings_obj.site_url else "/" # Fallback
+    app_settings = AppSettings.load() # Load once
+    site_url_to_redirect = app_settings.site_url if app_settings and app_settings.site_url else "/"
     return render(request, 'mailer_app/keep_subscribed_thank_you.html', {
         'title': "Subscription Confirmed",
-        'site_home_url': site_url_to_redirect # Pass site_url
+        'site_home_url': site_url_to_redirect,
+        'app_settings': app_settings # Pass app_settings
     })
 
 @login_required 
@@ -953,3 +969,39 @@ def delete_segment(request, segment_id):
         return redirect('mailer_app:manage_segments')
     messages.warning(request, "Deletion must be confirmed via POST.")
     return redirect('mailer_app:manage_segments')
+
+def track_click(request, log_id_str, original_url_encoded):
+    try:
+        log_id = uuid.UUID(log_id_str) # Convert string UUID to UUID object
+        log_entry = get_object_or_404(CampaignSendLog, id=log_id)
+        
+        # Decode the original URL. Make sure it's properly encoded when creating the link.
+        original_url = unquote(original_url_encoded)
+
+        # Log the click - record only the first click time on this log entry
+        if not log_entry.clicked_at:
+            log_entry.clicked_at = timezone.now()
+            
+            # Optional: Consider an open to also be an implicit open if not already recorded
+            # Some services do this because clicking a link implies the email was opened.
+            if not log_entry.opened_at:
+                log_entry.opened_at = timezone.now()
+            
+            log_entry.save(update_fields=['clicked_at'] + (['opened_at'] if not log_entry.opened_at else []))
+
+        logger.info(f"Tracked click for CampaignSendLog ID {log_id} to URL: {original_url}")
+        return redirect(original_url)
+
+    except (ValueError, Http404) as e: # ValueError for invalid UUID format from log_id_str
+        logger.error(f"Error tracking click: Invalid log_id '{log_id_str}' or log not found. URL: {original_url_encoded}. Error: {e}")
+        # Potentially redirect to a generic error page or a safe fallback.
+        # For now, returning 404. You might want to redirect to original_url if it can be safely unquoted.
+        return HttpResponseNotFound("The link is invalid or has expired.")
+    except Exception as e:
+        logger.error(f"Unexpected error tracking click: log_id={log_id_str}, url={original_url_encoded}. Error: {e}", exc_info=True)
+        # Fallback: Try to redirect to the original URL even if logging failed, if possible.
+        try:
+            return redirect(unquote(original_url_encoded))
+        except:
+            return HttpResponseNotFound("An error occurred while processing your click. Please try again.")
+        

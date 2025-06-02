@@ -13,11 +13,251 @@ import logging
 from mailer_app.models import Contact, Campaign, EmailTemplate, CampaignSendLog, Settings as AppSettings
 from bs4 import BeautifulSoup
 from django.urls import NoReverseMatch # For more specific exception handling
+from urllib.parse import quote
+
+try:
+    import html2text
+    # Initialize html2text handler once if it's successfully imported
+    HTML2TEXT_HANDLER = html2text.HTML2Text()
+    HTML2TEXT_HANDLER.ignore_links = True  # Recommended for plain text emails
+    HTML2TEXT_HANDLER.ignore_images = True # Recommended for plain text emails
+except ImportError:
+    HTML2TEXT_HANDLER = None
+    logger.warning("html2text library not found. Plain text version will use basic strip_tags output.")
 
 
 logger = logging.getLogger(__name__)
 
 # START MARKER FOR send_single_email_task IN tasks.py (REPLACE THE ENTIRE FUNCTION)
+@shared_task(bind=True, max_retries=3, default_retry_delay=5 * 60, rate_limit='10/s')
+def send_single_email_task(self, contact_id, campaign_id):
+    processed_successfully = False
+    log_status = 'failed'
+    log_error_message = None
+    contact = None
+    campaign = None
+    log_entry_for_tracking = None
+    message_id_from_send = 'N/A_django-ses_placeholder' # Initialize placeholder
+
+    try:
+        contact = Contact.objects.get(id=contact_id)
+        campaign = Campaign.objects.get(id=campaign_id)
+        email_template = campaign.email_template
+        app_settings_obj = AppSettings.load()
+
+        if not app_settings_obj or not app_settings_obj.sender_email:
+            log_error_message = "Error: Sender email not configured in AppSettings."
+            logger.error(f"Task ID: {self.request.id if self.request else 'N/A'} - {log_error_message} Campaign: {campaign_id}, Contact: {contact_id}.")
+            if campaign: Campaign.objects.filter(pk=campaign.id).update(failed_to_send=F('failed_to_send') + 1)
+            raise ValueError(log_error_message)
+
+        if not email_template:
+            log_error_message = f"Error: Campaign '{campaign.name}' (ID: {campaign.id}) has no email template."
+            logger.error(f"Task ID: {self.request.id if self.request else 'N/A'} - {log_error_message} Contact: {contact_id}.")
+            if campaign: Campaign.objects.filter(pk=campaign.id).update(failed_to_send=F('failed_to_send') + 1)
+            raise ValueError(log_error_message)
+
+        if not contact.subscribed:
+            logger.info(f"Task ID: {self.request.id if self.request else 'N/A'} - Contact {contact.email} (ID: {contact.id}) is unsubscribed. Skipping for campaign {campaign.id}.")
+            log_status = 'skipped'
+            log_error_message = "Contact unsubscribed."
+            return f"Skipped: Contact {contact.email} unsubscribed."
+
+        log_entry_for_tracking, created_log = CampaignSendLog.objects.update_or_create(
+            campaign=campaign, contact=contact, email_address=contact.email,
+            defaults={
+                'status': 'pending_send', 'opened_at': None, 'clicked_at': None,
+                'sent_at': None, 'message_id': None, 'error_message': None
+            }
+        )
+        if not created_log and log_entry_for_tracking.status in ['success', 'failed', 'skipped']:
+            log_entry_for_tracking.status = 'pending_send'
+            log_entry_for_tracking.opened_at = None
+            log_entry_for_tracking.clicked_at = None
+            log_entry_for_tracking.sent_at = None
+            log_entry_for_tracking.message_id = None
+            log_entry_for_tracking.error_message = None
+            log_entry_for_tracking.save(update_fields=['status', 'opened_at', 'clicked_at', 'sent_at', 'message_id', 'error_message'])
+        log_id_for_links = str(log_entry_for_tracking.id)
+
+        unsubscribe_url = '#'
+        tracking_pixel_url_for_img_tag = ''
+        # Using getattr with django_settings for your DEFAULT_BASE_URL approach
+        base_url_for_links = getattr(django_settings, 'DEFAULT_BASE_URL', "http://misconfigured-domain.com") 
+
+        try:
+            if app_settings_obj.site_url and app_settings_obj.site_url.startswith(('http://', 'https://')):
+                base_url_for_links = app_settings_obj.site_url.rstrip('/')
+            else:
+                current_site = Site.objects.get_current()
+                domain = current_site.domain
+                # CORRECTED: Use django_settings.DEBUG
+                protocol = 'https' if not django_settings.DEBUG else 'http' 
+                base_url_for_links = f"{protocol}://{domain}"
+            logger.info(f"Task ID: {self.request.id if self.request else 'N/A'} - Base URL for links: {base_url_for_links}")
+
+            try:
+                open_pixel_path = reverse('mailer_app:track_open', kwargs={'campaign_id': campaign.id, 'contact_id': contact.id})
+                raw_open_pixel_url = f"{base_url_for_links}{open_pixel_path}"
+                tracking_pixel_url_for_img_tag = f'<img src="{raw_open_pixel_url}" width="1" height="1" alt="" style="display:none;border:0;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;"/>'
+            except NoReverseMatch as e_open:
+                logger.error(f"Task ID: {self.request.id if self.request else 'N/A'} - NoReverseMatch for 'track_open': {e_open} (campaign_id={campaign.id}, contact_id={contact.id})", exc_info=True)
+
+            if contact.unsubscribe_token:
+                try:
+                    unsubscribe_path = reverse('mailer_app:unsubscribe_contact', kwargs={'token': str(contact.unsubscribe_token)})
+                    unsubscribe_url = f"{base_url_for_links}{unsubscribe_path}"
+                except NoReverseMatch as e_unsub:
+                    logger.error(f"Task ID: {self.request.id if self.request else 'N/A'} - NoReverseMatch for 'unsubscribe_contact': {e_unsub} (Token: {contact.unsubscribe_token})", exc_info=True)
+                    unsubscribe_url = f"{base_url_for_links}/unsubscribe-error-no-reverse/{contact.unsubscribe_token if contact.unsubscribe_token else 'unknown-token'}/"
+            else:
+                logger.warning(f"Task ID: {self.request.id if self.request else 'N/A'} - Contact {contact.email} (ID: {contact.id}) has no unsubscribe_token.")
+                unsubscribe_url = f"{base_url_for_links}/no-token-unsubscribe/{contact.id}/"
+        except Exception as e_url_gen:
+            logger.error(f"Task ID: {self.request.id if self.request else 'N/A'} - General error generating URLs: {e_url_gen}", exc_info=True)
+
+        context_data = {
+            'first_name': contact.first_name or '', 'last_name': contact.last_name or '',
+            'email': contact.email, 'company': contact.company or '', 'job_title': contact.job_title or '',
+            'unsubscribe_url': unsubscribe_url, 'tracking_pixel': tracking_pixel_url_for_img_tag,
+            'your_company_name': app_settings_obj.company_name or "Your Company",
+            'company_address': app_settings_obj.company_address or "",
+            'site_url': app_settings_obj.site_url or base_url_for_links,
+        }
+        if isinstance(contact.custom_fields, dict): context_data.update(contact.custom_fields)
+        django_template_context = Context(context_data)
+
+        try:
+            personalized_subject = Template(email_template.subject).render(django_template_context)
+            personalized_html_body_raw = Template(email_template.html_content).render(django_template_context)
+            personalized_footer_content = Template(email_template.footer_html).render(django_template_context)
+        except TemplateSyntaxError as e_render:
+            log_error_message = f"Template syntax error during rendering: {str(e_render)}"
+            logger.error(f"Task ID: {self.request.id if self.request else 'N/A'} - {log_error_message} (Template: '{email_template.name}', Campaign: {campaign.id})", exc_info=True)
+            if campaign: Campaign.objects.filter(pk=campaign.id).update(failed_to_send=F('failed_to_send') + 1)
+            raise
+
+        soup_for_click_rewriting = BeautifulSoup(personalized_html_body_raw, 'html.parser')
+        for a_tag in soup_for_click_rewriting.find_all('a', href=True):
+            original_href = a_tag['href']
+            if original_href and \
+               not original_href.startswith(('#', 'mailto:', 'tel:')) and \
+               'awstrack.me' not in original_href and \
+               '/track/click/' not in original_href and \
+               original_href != unsubscribe_url:
+                final_original_href_for_tracking = original_href
+                if final_original_href_for_tracking.startswith('/'):
+                    final_original_href_for_tracking = f"{base_url_for_links.rstrip('/')}{final_original_href_for_tracking}"
+                if final_original_href_for_tracking.startswith(('http://', 'https://')):
+                    encoded_original_url = quote(final_original_href_for_tracking, safe='')
+                    try:
+                        click_tracking_path = reverse('mailer_app:track_click', kwargs={
+                            'log_id_str': log_id_for_links,
+                            'original_url_encoded': encoded_original_url
+                        })
+                        a_tag['href'] = f"{base_url_for_links.rstrip('/')}{click_tracking_path}"
+                    except NoReverseMatch as e_click_rev:
+                        logger.error(f"Task ID: {self.request.id if self.request else 'N/A'} - NoReverseMatch for 'track_click' while rewriting link '{final_original_href_for_tracking}': {e_click_rev}", exc_info=True)
+                    except Exception as e_rewrite:
+                        logger.error(f"Task ID: {self.request.id if self.request else 'N/A'} - Error rewriting link '{final_original_href_for_tracking}': {e_rewrite}", exc_info=True)
+                else:
+                    logger.info(f"Task ID: {self.request.id if self.request else 'N/A'} - Skipping link rewrite for non-absolute or non-HTTP(S) link: {original_href}")
+        personalized_html_body_with_tracked_links = str(soup_for_click_rewriting)
+
+        final_soup = BeautifulSoup(personalized_html_body_with_tracked_links, 'html.parser')
+        footer_soup_element = BeautifulSoup(personalized_footer_content, 'html.parser')
+        open_pixel_soup_element = None
+        if context_data['tracking_pixel'] and "<!--" not in context_data['tracking_pixel']:
+            open_pixel_soup_element = BeautifulSoup(context_data['tracking_pixel'], 'html.parser')
+        
+        target_body = final_soup.body
+        if not target_body:
+            original_content_str = str(final_soup)
+            final_soup = BeautifulSoup(f"<body>{original_content_str}</body>", 'html.parser')
+            target_body = final_soup.body
+
+        if footer_soup_element.contents:
+            for child_node in list(footer_soup_element.contents):
+                target_body.append(child_node.extract())
+
+        if open_pixel_soup_element and open_pixel_soup_element.contents: 
+            for child_node in list(open_pixel_soup_element.contents): 
+                target_body.append(child_node.extract())
+        
+        full_html_content = str(final_soup)
+        logger.info(f"Task ID: {self.request.id if self.request else 'N/A'} - Final HTML content generated for {contact.email}.")
+
+        plain_text_content = strip_tags(full_html_content)
+        if HTML2TEXT_HANDLER: 
+            try:
+                plain_text_content = HTML2TEXT_HANDLER.handle(full_html_content)
+            except Exception as e_html2text:
+                logger.warning(f"Task ID: {self.request.id if self.request else 'N/A'} - html2text conversion failed: {e_html2text}. Falling back to strip_tags.")
+        
+        try:
+            send_mail(
+                subject=personalized_subject, message=plain_text_content,
+                from_email=app_settings_obj.sender_email, recipient_list=[contact.email],
+                html_message=full_html_content, fail_silently=False
+            )
+        except Exception as e_send:
+            log_error_message = f"Email sending failed: {str(e_send)[:250]}"
+            logger.error(f"Task ID: {self.request.id if self.request else 'N/A'} - {log_error_message}", exc_info=True)
+            raise 
+
+        processed_successfully = True
+        log_status = 'success'
+        logger.info(f"Task ID: {self.request.id if self.request else 'N/A'} - Email successfully sent to {contact.email} for campaign {campaign.id}.")
+        if campaign: Campaign.objects.filter(pk=campaign.id).update(successfully_sent=F('successfully_sent') + 1)
+        return f"Email sent to {contact.email}."
+
+    except Contact.DoesNotExist:
+        logger.error(f"Task ID: {self.request.id if self.request else 'N/A'} - Contact ID {contact_id} does not exist. (Campaign: {campaign_id if campaign else 'unknown'})")
+        log_error_message = f"Contact ID {contact_id} not found."
+        return log_error_message
+    except Campaign.DoesNotExist:
+        logger.error(f"Task ID: {self.request.id if self.request else 'N/A'} - Campaign ID {campaign_id} does not exist. (Contact: {contact_id if contact else 'unknown'})")
+        log_error_message = f"Campaign ID {campaign_id} not found."
+        return log_error_message
+    except Exception as e:
+        log_error_message = log_error_message or f"Unexpected task error: {str(e)[:250]}"
+        logger.exception(f"Task ID: {self.request.id if self.request else 'N/A'} - {log_error_message} (Contact: {contact_id if contact else 'unknown'}, Campaign: {campaign_id if campaign else 'unknown'})")
+        if campaign and not processed_successfully:
+            Campaign.objects.filter(pk=campaign.id).update(failed_to_send=F('failed_to_send') + 1)
+        raise
+
+    finally:
+        current_processing_time = timezone.now()
+        if log_entry_for_tracking:
+            log_entry_for_tracking.status = log_status
+            log_entry_for_tracking.sent_at = current_processing_time
+            if processed_successfully:
+                log_entry_for_tracking.message_id = message_id_from_send 
+                log_entry_for_tracking.error_message = None
+            else:
+                log_entry_for_tracking.error_message = log_error_message or "Processing failed due to an unspecified error in the task."
+            log_entry_for_tracking.save()
+            logger.info(f"Task ID: {self.request.id if self.request else 'N/A'} - Updated CampaignSendLog ID {log_entry_for_tracking.id} with status: {log_status} at {current_processing_time}")
+        elif contact and campaign:
+            logger.warning(f"Task ID: {self.request.id if self.request else 'N/A'} - log_entry_for_tracking was not set. Attempting fallback CampaignSendLog.update_or_create.")
+            CampaignSendLog.objects.update_or_create(
+                campaign=campaign, contact=contact, email_address=contact.email,
+                defaults={
+                    'status': log_status,
+                    'error_message': log_error_message or "Processing failed (fallback log).",
+                    'sent_at': current_processing_time,
+                    'opened_at': None, 'clicked_at': None
+                }
+            )
+        else:
+            logger.error(f"Task ID: {self.request.id if self.request else 'N/A'} - Could not robustly log CampaignSendLog: Contact/Campaign missing. CID: {contact_id}, CampID: {campaign_id}, Status: {log_status}, Error: {log_error_message}")
+
+        if campaign_id is not None:
+            # Ensure check_campaign_completion is defined or imported in this tasks.py file
+            check_campaign_completion(campaign_id)
+
+# START MARKER FOR send_single_email_task IN tasks.py (REPLACE THE ENTIRE FUNCTION)
+'''
 @shared_task(bind=True, max_retries=3, default_retry_delay=5 * 60, rate_limit='10/s')
 def send_single_email_task(self, contact_id, campaign_id):
     processed_successfully = False
@@ -236,6 +476,7 @@ def send_single_email_task(self, contact_id, campaign_id):
         if campaign_id is not None:
              check_campaign_completion(campaign_id)
 # END MARKER FOR send_single_email_task IN tasks.py (REPLACE THE ENTIRE FUNCTION)
+'''
 
 def check_campaign_completion(campaign_id, is_skip=False, is_skip_or_contact_error=False):
     """

@@ -1,27 +1,33 @@
-{% extends "mailer_app/base.html" %}
+{% extends "mailer_app/public_base.html" %} {# MODIFIED HERE #}
 
-{% block title %}Subscription Confirmed - Bulk Emailer{% endblock %}
+{% block title %}{{ title|default:"Subscription Confirmed" }}{% endblock %}
 
-{% block page_title %}Thank You!{% endblock %}
+{% block page_title %}{{ title|default:"Thank You!" }}{% endblock %}
 
 {% block content %}
-<div class="max-w-lg mx-auto">
-    <div class="card text-center"> {% if messages %}
-            {% for message in messages %}
-                <div class="alert {% if message.tags == 'success' %}alert-success{% elif message.tags == 'error' %}alert-danger{% elif message.tags == 'warning' %}alert-warning{% else %}alert-info{% endif %}" role="alert">
-                    <p class="font-medium">{{ message.tags|title }}: <span class="font-normal">{{ message|safe }}</span></p>
-                </div>
-            {% endfor %}
-        {% endif %}
-        
-        <h2 class="text-2xl font-semibold text-green-600 mb-3">Subscription Confirmed!</h2>
-        <p class="text-gray-700 mb-4">
-            Thank you for choosing to stay subscribed to our mailing list. We're glad to have you!
-        </p>
-        <p class="text-gray-600 text-sm mb-4">
-            You will continue to receive our latest updates, news, and offers.
-        </p>
-        <a href="{{ site_home_url|default:'/' }}" class="btn">Visit Our Website</a>
-    </div>
-</div>
+    {# Display Django Messages Framework messages, if any (the view sets one) #}
+    {% if messages %}
+        <div class="mb-4 space-y-2">
+        {% for message in messages %}
+            <div class="alert {% if 'success' in message.tags %}alert-success{% elif 'error' in message.tags %}alert-danger{% elif 'warning' in message.tags %}alert-warning{% else %}alert-info{% endif %}" role="alert">
+                 <p class="font-medium">
+                    {% if 'error' in message.tags %}Error
+                    {% elif 'warning' in message.tags %}Warning
+                    {% elif 'success' in message.tags %}Success
+                    {% else %}Info{% endif %}:
+                    <span class="font-normal">{{ message|safe }}</span>
+                </p>
+            </div>
+        {% endfor %}
+        </div>
+    {% endif %}
+
+    <h2 class="text-2xl font-semibold text-green-600 mb-3" style="margin-top:1rem;">Subscription Confirmed!</h2> {# Added style for spacing if no messages #}
+    <p class="text-gray-700 mb-4">
+        Thank you for choosing to stay subscribed to our mailing list. We're glad to have you!
+    </p>
+    <p class="text-gray-600 text-sm mb-4">
+        You will continue to receive our latest updates, news, and offers.
+    </p>
+    <a href="{{ site_home_url|default:'/' }}" class="btn">Visit Our Website</a>
 {% endblock %}

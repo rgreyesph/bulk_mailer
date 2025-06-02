@@ -1,54 +1,62 @@
-{% extends "mailer_app/base.html" %} {% block title %}Confirm Unsubscription - Bulk Emailer{% endblock %}
+{% extends "mailer_app/public_base.html" %}
 
-{% block page_title %}Confirm Unsubscription{% endblock %}
+{% block title %}Confirm Unsubscription{% endblock %}
+
+{% block page_title %}Confirm Your Unsubscription{% endblock %}
 
 {% block content %}
-<div class="max-w-lg mx-auto">
-    <div class="card"> {% if messages %}
-            <div class="mb-4 space-y-2">
-            {% for message in messages %}
-                <div class="alert {% if message.tags == 'success' %}alert-success{% elif message.tags == 'error' %}alert-danger{% elif message.tags == 'warning' %}alert-warning{% else %}alert-info{% endif %}" role="alert">
-                    <p class="font-medium">{{ message.tags|title }}: <span class="font-normal">{{ message }}</span></p>
-                </div>
-            {% endfor %}
+    {# Display Django messages framework messages, if any (e.g., if redirected here with a message) #}
+    {% if messages %}
+        <div class="mb-4 space-y-2">
+        {% for message in messages %}
+            <div class="alert {% if 'success' in message.tags %}alert-success{% elif 'error' in message.tags %}alert-danger{% elif 'warning' in message.tags %}alert-warning{% else %}alert-info{% endif %}" role="alert">
+                <p class="font-medium">
+                    {% if 'error' in message.tags %}Error
+                    {% elif 'warning' in message.tags %}Warning
+                    {% elif 'success' in message.tags %}Success
+                    {% else %}Info{% endif %}:
+                    <span class="font-normal">{{ message|safe }}</span>
+                </p>
             </div>
-        {% endif %}
+        {% endfor %}
+        </div>
+    {% endif %}
 
-        {% if contact and contact.subscribed %}
-            <p class="text-gray-700 mb-2">
-                Are you sure you want to unsubscribe <strong>{{ contact.email|default:"your email address" }}</strong> from our mailing list?
-            </p>
-            <p class="text-gray-500 text-sm mb-4">You will no longer receive marketing emails from us. Transactional emails (e.g., account updates, password resets) may still be sent if applicable.</p>
-            <hr class="my-4">
-            <form method="post" action="{% url 'mailer_app:unsubscribe_contact' token=token %}">
-                {% csrf_token %}
-                <button type="submit" name="confirm_unsubscribe" class="btn-danger w-full mb-2 text-sm py-2.5">
-                    Yes, Unsubscribe Me
-                </button>
-                <button type="submit" name="keep_subscribed" class="btn-secondary w-full text-sm py-2.5 block text-center">
-                    No, Keep Me Subscribed
-                </button>
-            </form>
-        {% elif contact and not contact.subscribed %}
-            <div class="alert alert-info">
-                <p class="font-medium mb-0"><strong>{{ contact.email|default:"This email address" }}</strong> is already unsubscribed.</p>
-                <p class="text-sm mb-0">No further action is needed.</p>
-            </div>
-            <div class="text-center mt-4">
-                <a href="{% url 'mailer_app:dashboard' %}" class="btn">Go to Homepage</a>
-            </div>
-        {% else %}
-            <div class="alert alert-danger">
-                <p class="font-medium mb-0">Invalid Unsubscribe Request</p>
-                <p class="text-sm mb-0">{{ message|default:"The link may be incorrect or may have expired. If you believe this is an error, please contact support." }}</p>
-            </div>
-             <div class="text-center mt-4">
-                <a href="{% url 'mailer_app:keep_subscribed_thank_you' %}" class="btn-secondary w-full text-sm py-2.5 block text-center">
-            </div>
-        {% endif %}
-    </div>
-    <div class="text-center text-gray-500 text-sm mt-4">
-        If you have any concerns, please contact our support team.
-    </div>
-</div>
+    {% if contact and contact.subscribed %}
+        <p class="text-gray-700 mb-2">
+            Are you sure you want to unsubscribe <strong>{{ contact.email|default:"your email address" }}</strong> from our mailing list?
+        </p>
+        <p class="text-gray-500 text-sm mb-4">
+            You will no longer receive marketing emails from us. Transactional emails (e.g., account updates) may still be sent if applicable.
+        </p>
+        <hr>
+        <form method="post" action="{% url 'mailer_app:unsubscribe_contact' token=token %}" class="space-y-3">
+            {% csrf_token %}
+            <button type="submit" name="confirm_unsubscribe" class="btn btn-danger btn-full-width">
+                Yes, Unsubscribe Me
+            </button>
+            <button type="submit" name="keep_subscribed" class="btn btn-secondary btn-full-width">
+                No, Keep Me Subscribed
+            </button>
+        </form>
+    {% elif contact and not contact.subscribed %}
+        <div class="alert alert-info">
+            <h5 class="font-semibold text-lg" style="margin-bottom: 0.5rem;">Already Unsubscribed</h5> {# Example of inline style if needed, but class is better #}
+            <p><strong>{{ contact.email|default:"This email address" }}</strong> is already unsubscribed.</p>
+            <p class="text-sm">No further action is needed.</p>
+        </div>
+        <div class="mt-4">
+            <a href="{{ site_home_url|default:'/' }}" class="btn">Go to Our Website</a>
+        </div>
+    {% else %}
+        {# This case is usually hit if the token was invalid initially, handled by the view before this page is shown #}
+        {# But if somehow reached with invalid context: #}
+        <div class="alert alert-danger">
+            <h5 class="font-semibold text-lg" style="margin-bottom: 0.5rem;">Request Issue</h5>
+            <p>{{ message|safe|default:"There was a problem with your request. The link may be incorrect or expired." }}</p>
+        </div>
+        <div class="mt-4">
+            <a href="{{ site_home_url|default:'/' }}" class="btn">Go to Our Website</a>
+        </div>
+    {% endif %}
 {% endblock %}

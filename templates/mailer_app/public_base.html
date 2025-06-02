@@ -1,0 +1,37 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Email Preferences{% endblock %} - {{ app_settings.company_name|default:"Our Company" }}</title>
+    
+    {# This line links to your external CSS file. #}
+    {# Ensure public_styles.css exists in mailer_app/static/mailer_app/css/ #}
+    <link rel="stylesheet" href="{% static 'mailer_app/css/public_styles.css' %}">
+
+</head>
+<body>
+    <main class="container">
+        <header class="mb-6">
+            {# Optional: You can place a logo here if desired #}
+            {# Example:
+            {% if app_settings.company_logo_url %}  <img src="{{ app_settings.company_logo_url }}" alt="{{ app_settings.company_name }} Logo" style="max-height: 60px; margin-bottom: 1rem; margin-left: auto; margin-right: auto; display: block;"> {% endif %}
+            #}
+            <h1 class="page-title">{% block page_title %}Email Preferences{% endblock %}</h1>
+        </header>
+
+        {% block content %}
+        {# Page-specific content (e.g., from unsubscribe_page.html, unsubscribe_confirmation.html) will be injected here #}
+        {% endblock %}
+
+        <footer class="footer-text">
+            <p>&copy; {% now "Y" %} {{ app_settings.company_name|default:"Our Company Inc." }}. All rights reserved.</p>
+            {# You can add a link to your main site if site_home_url is passed and relevant #}
+            {% if site_home_url and site_home_url != '/' %}
+            <p><a href="{{ site_home_url }}">Visit our website</a></p>
+            {% endif %}
+        </footer>
+    </main>
+</body>
+</html>
